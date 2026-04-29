@@ -1,0 +1,70 @@
+name: FaceMap
+options:
+  bundleIdPrefix: com.fuanne.facemap
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_STRICT_CONCURRENCY: minimal
+    GENERATE_INFOPLIST_FILE: NO
+
+targets:
+  FaceMap:
+    type: application
+    platform: iOS
+    sources:
+      - path: FaceMap
+    info:
+      path: FaceMap/Info.plist
+      properties:
+        CFBundleDisplayName: FaceMap
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+        UIRequiredDeviceCapabilities:
+          - arm64
+          - front-facing-camera
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSCameraUsageDescription: FaceMap uses the front camera and TrueDepth sensor to construct a 3D face model for aesthetic analysis.
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        PRODUCT_BUNDLE_IDENTIFIER: com.fuanne.facemap
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+
+  FaceMapTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FaceMapTests
+    dependencies:
+      - target: FaceMap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fuanne.facemap.tests
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  FaceMap:
+    build:
+      targets:
+        FaceMap: all
+        FaceMapTests: [test]
+    test:
+      targets:
+        - FaceMapTests
+    run:
+      config: Debug
+    archive:
+      config: Release
