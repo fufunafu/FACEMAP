@@ -9,6 +9,7 @@ import simd
 struct GoldenRatioMetric: FaceMetric {
     static let id = "facial.goldenRatio"
     static let displayName = "Golden ratio (selected)"
+    static let domain: FaceDomain = .symmetry
     static let phi = 1.6180339887
 
     var regions: [FacialRegion] { [.lipUpper, .lipLower, .perioral, .chin] }
@@ -49,7 +50,7 @@ struct GoldenRatioMetric: FaceMetric {
                 r1, Self.phi, r2
             )
             return MetricResult(
-                metricId: Self.id, metricName: Self.displayName,
+                metricId: Self.id, metricName: Self.displayName, domain: Self.domain,
                 value: worst, target: target, deviation: deviation,
                 confidence: 1.0, regions: flagged, notes: notes
             )
@@ -59,7 +60,7 @@ struct GoldenRatioMetric: FaceMetric {
     }
 
     private static func failure(_ note: String) -> MetricResult {
-        MetricResult(metricId: id, metricName: displayName,
+        MetricResult(metricId: id, metricName: displayName, domain: domain,
                      value: .nan, target: 0...0.10, deviation: .nan,
                      confidence: 0, regions: [], notes: "Unavailable: \(note)")
     }

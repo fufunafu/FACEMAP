@@ -8,29 +8,55 @@ struct DisclaimerGate<Content: View>: View {
         if hasAccepted {
             content()
         } else {
-            VStack(spacing: 24) {
-                Image(systemName: "stethoscope")
-                    .font(.system(size: 56))
-                    .foregroundStyle(.secondary)
-                Text(DisclaimerCopy.firstLaunchTitle)
-                    .font(.title2.weight(.semibold))
-                    .multilineTextAlignment(.center)
-                ScrollView {
-                    Text(DisclaimerCopy.firstLaunchBody)
-                        .font(.body)
-                        .multilineTextAlignment(.leading)
+            ZStack {
+                Theme.canvas.ignoresSafeArea()
+
+                VStack(spacing: 32) {
+                    Spacer(minLength: 24)
+
+                    BrandMark(.large)
+
+                    Text("A planning aid for licensed practitioners")
+                        .font(Type.displayMedium)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 24)
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text(DisclaimerCopy.firstLaunchBody)
+                                .font(Type.body)
+                                .foregroundStyle(Theme.inkDim)
+                                .multilineTextAlignment(.leading)
+
+                            Text("Developed in collaboration with Dr Andreas Nikolis, MD, FRCSC.")
+                                .font(Type.callout)
+                                .foregroundStyle(Theme.ink)
+                                .padding(.top, 4)
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                    .frame(maxHeight: 320)
+
+                    VStack(spacing: 12) {
+                        Button {
+                            hasAccepted = true
+                        } label: {
+                            Text("I am a licensed practitioner — continue")
+                        }
+                        .buttonStyle(.primary)
+                    }
+                    .padding(.horizontal, 24)
+
+                    Spacer(minLength: 24)
                 }
-                .frame(maxHeight: 320)
-                Button {
-                    hasAccepted = true
-                } label: {
-                    Text("I am a licensed practitioner — continue")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-                .buttonStyle(.borderedProminent)
             }
-            .padding(24)
+            .preferredColorScheme(.light)
         }
     }
+}
+
+#Preview {
+    DisclaimerGate { Text("App content").foregroundStyle(.white) }
+        .preferredColorScheme(.light)
 }

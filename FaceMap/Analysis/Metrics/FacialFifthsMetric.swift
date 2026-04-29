@@ -12,6 +12,7 @@ import simd
 struct FacialFifthsMetric: FaceMetric {
     static let id = "facial.fifths"
     static let displayName = "Facial fifths"
+    static let domain: FaceDomain = .symmetry
     var regions: [FacialRegion] { [.templeL, .templeR, .midfaceL, .midfaceR] }
 
     func evaluate(_ face: AnalyzableFace) -> MetricResult {
@@ -52,7 +53,7 @@ struct FacialFifthsMetric: FaceMetric {
             let deviation = max(0, worst - target.upperBound)
             let notes = "fifths " + fractions.map { String(format: "%.0f%%", $0 * 100) }.joined(separator: " / ")
             return MetricResult(
-                metricId: Self.id, metricName: Self.displayName,
+                metricId: Self.id, metricName: Self.displayName, domain: Self.domain,
                 value: worst, target: target, deviation: deviation,
                 confidence: 1.0, regions: flagged, notes: notes
             )
@@ -62,7 +63,7 @@ struct FacialFifthsMetric: FaceMetric {
     }
 
     private static func failure(_ note: String) -> MetricResult {
-        MetricResult(metricId: id, metricName: displayName,
+        MetricResult(metricId: id, metricName: displayName, domain: domain,
                      value: .nan, target: 0...0.10, deviation: .nan,
                      confidence: 0, regions: [], notes: "Unavailable: \(note)")
     }

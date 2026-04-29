@@ -21,24 +21,45 @@ struct MetricRegistry {
             FacialFifthsMetric(),
             GoldenRatioMetric(),
             CanthalTiltMetric(),
+            AsymmetryMetric(),
         ])
     }
 }
 
 extension Array where Element == MetricResult {
+    private static let severityOrder: [MetricResult.Severity] = [.normal, .mild, .moderate, .significant]
+
     /// Aggregate flagged regions across all results. A region appears once even if multiple
     /// metrics flag it. The associated severity is the worst across implicating metrics.
     var flaggedRegionsBySeverity: [FacialRegion: MetricResult.Severity] {
         var out: [FacialRegion: MetricResult.Severity] = [:]
-        let order: [MetricResult.Severity] = [.normal, .mild, .moderate, .significant]
         for r in self where !r.isWithinTarget {
             for region in r.regions {
                 let prev = out[region] ?? .normal
-                if (order.firstIndex(of: r.severity) ?? 0) > (order.firstIndex(of: prev) ?? 0) {
+                if (Self.severityOrder.firstIndex(of: r.severity) ?? 0) >
+                   (Self.severityOrder.firstIndex(of: prev) ?? 0) {
                     out[region] = r.severity
                 }
             }
         }
         return out
+    }
+
+    /// For each flagged region, the domain of the metric that contributed the worst severity.
+    /// Used by visualisations that want to colour a region in its dominant-metric's hue.
+    var regionDomainsByWorstSeverity: [FacialRegion: FaceDomain] {
+        var bestSeverity: [FacialRegion: MetricResult.Severity] = [:]
+        var domainOut:    [FacialRegion: FaceDomain] = [:]
+        for r in self where !r.isWithinTarget {
+            for region in r.regions {
+                let prev = bestSeverity[region] ?? .normal
+                if (Self.severityOrder.firstIndex(of: r.severity) ?? 0) >
+                   (Self.severityOrder.firstIndex(of: prev) ?? 0) {
+                    bestSeverity[region] = r.severity
+                    domainOut[region]    = r.domain
+                }
+            }
+        }
+        return domainOut
     }
 }

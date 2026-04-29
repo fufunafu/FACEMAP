@@ -7,6 +7,7 @@ import simd
 struct FacialThirdsMetric: FaceMetric {
     static let id = "facial.thirds"
     static let displayName = "Facial thirds"
+    static let domain: FaceDomain = .symmetry
     var regions: [FacialRegion] { [.forehead, .midfaceL, .midfaceR, .chin, .lipUpper, .lipLower] }
 
     func evaluate(_ face: AnalyzableFace) -> MetricResult {
@@ -49,6 +50,7 @@ struct FacialThirdsMetric: FaceMetric {
             return MetricResult(
                 metricId: Self.id,
                 metricName: Self.displayName,
+                domain: Self.domain,
                 value: worst,
                 target: target,
                 deviation: deviation,
@@ -62,7 +64,7 @@ struct FacialThirdsMetric: FaceMetric {
     }
 
     private static func failure(_ note: String) -> MetricResult {
-        MetricResult(metricId: id, metricName: displayName,
+        MetricResult(metricId: id, metricName: displayName, domain: domain,
                      value: .nan, target: 0...0.05, deviation: .nan,
                      confidence: 0, regions: [], notes: "Unavailable: \(note)")
     }

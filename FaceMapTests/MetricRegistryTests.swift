@@ -3,14 +3,15 @@ import simd
 @testable import FaceMap
 
 final class MetricRegistryTests: XCTestCase {
-    func test_defaultRegistry_hasAllV01Metrics() {
+    func test_defaultRegistry_hasAllShippedMetrics() {
         let r = MetricRegistry.defaultRegistry()
         let ids = r.metrics.map { $0.id }
         XCTAssertTrue(ids.contains(FacialThirdsMetric.id))
         XCTAssertTrue(ids.contains(FacialFifthsMetric.id))
         XCTAssertTrue(ids.contains(GoldenRatioMetric.id))
         XCTAssertTrue(ids.contains(CanthalTiltMetric.id))
-        XCTAssertEqual(ids.count, 4)
+        XCTAssertTrue(ids.contains(AsymmetryMetric.id))
+        XCTAssertEqual(ids.count, 5)
     }
 
     func test_evaluateAll_returnsOneResultPerMetric() {
@@ -36,7 +37,7 @@ final class MetricRegistryTests: XCTestCase {
             .alarBaseL:     SIMD3( 0.018, -0.08, 0),
         ])
         let results = MetricRegistry.defaultRegistry().evaluateAll(on: face)
-        XCTAssertEqual(results.count, 4)
+        XCTAssertEqual(results.count, 5)
     }
 
     func test_flaggedRegionsAggregation() {

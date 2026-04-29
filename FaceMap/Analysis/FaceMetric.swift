@@ -10,6 +10,8 @@ protocol FaceMetric {
     static var id: String { get }
     /// Human-readable name shown in the analysis screen.
     static var displayName: String { get }
+    /// Which quadrant of Dr Nikolis's four-domain framework this metric belongs to.
+    static var domain: FaceDomain { get }
     /// Regions this metric *can* implicate. Used for UI grouping.
     var regions: [FacialRegion] { get }
 
@@ -19,6 +21,7 @@ protocol FaceMetric {
 extension FaceMetric {
     var id: String { Self.id }
     var displayName: String { Self.displayName }
+    var domain: FaceDomain { Self.domain }
 }
 
 /// One outcome of evaluating a `FaceMetric` against a captured face.
@@ -27,6 +30,9 @@ struct MetricResult: Codable, Hashable {
     let metricId: String
     /// The metric's display name at evaluation time (denormalized for offline display).
     let metricName: String
+    /// The four-domain bucket this metric belongs to (denormalized so old persisted results
+    /// that pre-date the framework still render correctly).
+    let domain: FaceDomain
     /// The measured value (units depend on the metric — ratios are dimensionless, angles are degrees).
     let value: Double
     /// Accepted target range; `value in target` means within aesthetic norms.
@@ -52,6 +58,39 @@ struct MetricResult: Codable, Hashable {
 
     enum Severity: String, Codable, Hashable {
         case normal, mild, moderate, significant
+    }
+
+    // Custom decoding so v0.1-era results (no `domain` field) still load — they all
+    // came from Symmetry-domain metrics.
+    private enum CodingKeys: String, CodingKey {
+        case metricId, metricName, domain, value, target, deviation, confidence, regions, notes
+    }
+
+    init(metricId: String, metricName: String, domain: FaceDomain,
+         value: Double, target: ClosedRange<Double>, deviation: Double,
+         confidence: Double, regions: [FacialRegion], notes: String?) {
+        self.metricId = metricId
+        self.metricName = metricName
+        self.domain = domain
+        self.value = value
+        self.target = target
+        self.deviation = deviation
+        self.confidence = confidence
+        self.regions = regions
+        self.notes = notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        metricId   = try c.decode(String.self, forKey: .metricId)
+        metricName = try c.decode(String.self, forKey: .metricName)
+        domain     = try c.decodeIfPresent(FaceDomain.self, forKey: .domain) ?? .symmetry
+        value      = try c.decode(Double.self, forKey: .value)
+        target     = try c.decode(ClosedRange<Double>.self, forKey: .target)
+        deviation  = try c.decode(Double.self, forKey: .deviation)
+        confidence = try c.decode(Double.self, forKey: .confidence)
+        regions    = try c.decode([FacialRegion].self, forKey: .regions)
+        notes      = try c.decodeIfPresent(String.self, forKey: .notes)
     }
 }
 

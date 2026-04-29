@@ -23,9 +23,16 @@ import Foundation
 // not clinically meaningful**. The disclaimer-gate copy reflects this.
 
 enum FaceLandmarkIndices {
-    /// Map from anatomical landmark to vertex index in `CapturedFace.vertices`.
-    /// PLACEHOLDER VALUES — see header comment.
-    static let vertexIndex: [AnatomicalLandmark: Int] = [
+    /// Calibrated overrides (from `LandmarkCalibrationStore`) merged over the placeholder
+    /// defaults. Use this in metric and analysis code — it transparently picks up whatever
+    /// the practitioner has calibrated without touching call sites.
+    static var vertexIndex: [AnatomicalLandmark: Int] {
+        LandmarkCalibrationStore.shared.effective()
+    }
+
+    /// Placeholder vertex indices used until the practitioner calibrates against their
+    /// own captured mesh. PLACEHOLDER VALUES — see header comment.
+    static let defaultVertexIndex: [AnatomicalLandmark: Int] = [
         .trichion:       16,    // top of forehead, midline
         .glabella:       28,    // mid-brow, midline
         .nasion:         168,   // nasal root

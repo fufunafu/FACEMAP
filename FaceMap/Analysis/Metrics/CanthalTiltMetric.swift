@@ -8,6 +8,7 @@ import simd
 struct CanthalTiltMetric: FaceMetric {
     static let id = "ocular.canthalTilt"
     static let displayName = "Canthal tilt"
+    static let domain: FaceDomain = .symmetry
     var regions: [FacialRegion] { [.tearTroughL, .tearTroughR, .midfaceL, .midfaceR] }
 
     func evaluate(_ face: AnalyzableFace) -> MetricResult {
@@ -36,7 +37,7 @@ struct CanthalTiltMetric: FaceMetric {
 
             let notes = String(format: "right %.1f°, left %.1f°", tiltR, tiltL)
             return MetricResult(
-                metricId: Self.id, metricName: Self.displayName,
+                metricId: Self.id, metricName: Self.displayName, domain: Self.domain,
                 value: value, target: target, deviation: worst,
                 confidence: 1.0, regions: flagged, notes: notes
             )
@@ -46,7 +47,7 @@ struct CanthalTiltMetric: FaceMetric {
     }
 
     private static func failure(_ note: String) -> MetricResult {
-        MetricResult(metricId: id, metricName: displayName,
+        MetricResult(metricId: id, metricName: displayName, domain: domain,
                      value: .nan, target: 4.0...7.0, deviation: .nan,
                      confidence: 0, regions: [], notes: "Unavailable: \(note)")
     }

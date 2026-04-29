@@ -19,4 +19,21 @@ enum DisclaimerCopy {
     static let analysisFooter = """
     For practitioner planning use only. Not a medical recommendation.
     """
+
+    /// Placeholder bio copy. Dr Nikolis to supply final text + portrait.
+    static let aboutNikolis = """
+    Dr Andreas Nikolis is an aesthetic medicine specialist whose published \
+    Facial Aesthetic framework — Mechanical behaviour, Optical properties, \
+    Symmetry & proportions, Structural volume — informs the four-domain analysis \
+    used throughout FaceMap.
+
+    This app is a planning aid for licensed practitioners and does not replace \
+    direct clinical examination. The framework, terminology, and visual language \
+    used here are derived from his work; clinical decisions remain with the \
+    treating practitioner.
+    """
+
+    static let pdfFooter = """
+    FaceMap planning aid · Not a medical device · Practitioner is the sole clinical decision-maker.
+    """
 }

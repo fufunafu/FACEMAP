@@ -24,8 +24,10 @@ targets:
       path: FaceMap/Info.plist
       properties:
         CFBundleDisplayName: FaceMap
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleGetInfoString: FaceMap by Dr Andreas Nikolis
+        CFBundleShortVersionString: "0.2.0"
         CFBundleVersion: "1"
+        UIUserInterfaceStyle: Light
         UILaunchScreen:
           UIColorName: ""
         UIRequiredDeviceCapabilities:
@@ -54,6 +56,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fuanne.facemap.tests
         CODE_SIGN_STYLE: Automatic
+        GENERATE_INFOPLIST_FILE: YES
 
 schemes:
   FaceMap:
