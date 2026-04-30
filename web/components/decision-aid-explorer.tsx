@@ -31,19 +31,23 @@ export function DecisionAidExplorer() {
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:items-start">
       <div className="flex flex-col items-center gap-6">
-        <FasRadar
-          interactive
-          focused={selected}
-          onFocusChange={setSelected}
-          values={values}
-          size={520}
-        />
+        <div className="w-full max-w-[520px]">
+          <FasRadar
+            interactive
+            focused={selected}
+            onFocusChange={setSelected}
+            values={values}
+            size={520}
+          />
+        </div>
         <FacetGrader
           selected={selected}
           values={values}
           setValues={setValues}
         />
-        <Recommendation ranking={ranking} totalGrade={totalGrade} />
+        <div className="w-full max-w-[520px]">
+          <Recommendation ranking={ranking} totalGrade={totalGrade} />
+        </div>
       </div>
 
       <aside

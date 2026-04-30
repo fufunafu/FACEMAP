@@ -98,8 +98,9 @@ export function FasRadar({
     <svg
       ref={svgRef}
       viewBox={`0 0 ${VIEW} ${VIEW}`}
-      width={size}
-      height={size}
+      width="100%"
+      height="auto"
+      style={{ maxWidth: size }}
       role={interactive ? "tablist" : "img"}
       aria-label="Facial Assessment Scale (FAS™) radar chart with five facets"
       className={cn("select-none", className)}

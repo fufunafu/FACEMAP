@@ -15,11 +15,13 @@ const NAV: Array<{ href: string; label: string }> = [
 
 export function NavBar() {
   return (
-    <header className="sticky top-0 z-40 border-b hairline bg-[var(--color-canvas)]/80 backdrop-blur">
-      <div className="container-page flex h-14 items-center justify-between gap-6">
-        <Link href="/" className="flex items-center gap-2">
+    <header className="sticky top-0 z-30 border-b hairline bg-[var(--color-canvas)]/85 backdrop-blur">
+      <div className="container-page flex h-14 items-center justify-between gap-3 md:gap-6">
+        <Link href="/" className="flex items-center gap-2" aria-label="FaceMap home">
           <BrandMark />
-          <span className="font-display text-lg tracking-tight">FaceMap</span>
+          <span className="font-display text-base tracking-tight md:text-lg">
+            FaceMap
+          </span>
         </Link>
         <nav aria-label="Primary" className="hidden items-center gap-6 md:flex">
           {NAV.map((n) => (
@@ -32,15 +34,17 @@ export function NavBar() {
             </Link>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
-          <ThemeToggle />
+        <div className="flex items-center gap-2 md:gap-3">
+          <span className="hidden md:inline-flex">
+            <ThemeToggle />
+          </span>
           <Link
             href="/access"
             className="hidden rounded-[var(--radius-button)] bg-[var(--color-cta-bg)] px-4 py-2 text-sm font-medium text-[var(--color-cta-ink)] transition hover:opacity-90 md:inline-flex"
           >
             Get access
           </Link>
-          <MobileNav items={NAV} />
+          <MobileNav />
         </div>
       </div>
     </header>

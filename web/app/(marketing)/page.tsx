@@ -24,12 +24,12 @@ export default function HomePage() {
 function Hero() {
   return (
     <section className="relative overflow-hidden border-b hairline">
-      <div className="container-page grid gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-16 lg:py-28">
+      <div className="container-page grid gap-8 py-14 md:gap-10 md:py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-16 lg:py-28">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             AART-HIT™ · For licensed aesthetic practitioners
           </p>
-          <h1 className="mt-5 text-balance font-display text-5xl leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
+          <h1 className="mt-5 text-balance font-display text-[2.5rem] leading-[1.05] tracking-tight sm:text-5xl md:text-6xl lg:text-7xl">
             Turn your AART™ into a{" "}
             <span className="italic text-[var(--color-facet-symmetry)]">
               HIT™
@@ -83,12 +83,12 @@ function Hero() {
           ].map((s) => (
             <div
               key={s.label}
-              className="bg-[var(--color-canvas)] px-6 py-6"
+              className="bg-[var(--color-canvas)] px-4 py-5 md:px-6 md:py-6"
             >
-              <p className="num font-display text-3xl tracking-tight text-[var(--color-ink)]">
+              <p className="num font-display text-2xl tracking-tight text-[var(--color-ink)] md:text-3xl">
                 {s.stat}
               </p>
-              <p className="mt-1 text-xs text-[var(--color-ink-dim)]">
+              <p className="mt-1 text-[11px] text-[var(--color-ink-dim)] md:text-xs">
                 {s.label}
               </p>
             </div>
@@ -102,7 +102,7 @@ function Hero() {
 function AartIntro() {
   return (
     <section className="border-b hairline">
-      <div className="container-page py-20">
+      <div className="container-page py-14 md:py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             The methodology
@@ -146,7 +146,7 @@ function AartIntro() {
 function FasTeaser() {
   return (
     <section className="border-b hairline">
-      <div className="container-page py-20">
+      <div className="container-page py-14 md:py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Assessment
@@ -179,7 +179,7 @@ function FasTeaser() {
 function HitsTeaser() {
   return (
     <section className="border-b hairline">
-      <div className="container-page py-20">
+      <div className="container-page py-14 md:py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Treatment
@@ -212,7 +212,7 @@ function HitsTeaser() {
 function RangeTeaser() {
   return (
     <section className="border-b hairline">
-      <div className="container-page py-20">
+      <div className="container-page py-14 md:py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Range
@@ -257,7 +257,7 @@ function RangeTeaser() {
 function Built() {
   return (
     <section className="border-b hairline">
-      <div className="container-page grid gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
+      <div className="container-page grid gap-8 py-14 md:gap-10 md:py-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Built by clinicians
@@ -291,7 +291,7 @@ function Built() {
 function CTA() {
   return (
     <section>
-      <div className="container-page py-20 text-center">
+      <div className="container-page py-14 md:py-20 text-center">
         <h2 className="mx-auto max-w-2xl font-display text-4xl tracking-tight md:text-5xl">
           Walk the AART. Land the HIT.
         </h2>

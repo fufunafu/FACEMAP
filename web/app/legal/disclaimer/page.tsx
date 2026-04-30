@@ -12,7 +12,7 @@ export default function DisclaimerPage() {
       <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
         Legal
       </p>
-      <h1 className="mt-4 font-display text-5xl tracking-tight md:text-6xl">
+      <h1 className="mt-4 font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
         {disclaimer.firstLaunchTitle}.
       </h1>
       <div className="mt-10 space-y-6 text-[var(--color-ink-dim)]">

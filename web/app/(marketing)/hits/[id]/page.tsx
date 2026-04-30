@@ -40,14 +40,14 @@ export default async function HitDetailPage({
           backgroundImage: `linear-gradient(180deg, ${hit.hue}1F 0%, transparent 60%)`,
         }}
       >
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <p
             className="text-[11px] uppercase tracking-[0.2em]"
             style={{ color: hit.hue }}
           >
             {hit.region}
           </p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
+          <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
             {hit.name}
           </h1>
           <p className="mt-5 max-w-2xl text-lg text-[var(--color-ink-dim)]">
@@ -57,7 +57,7 @@ export default async function HitDetailPage({
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <div className="grid gap-12 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <article>
               <h2 className="font-display text-3xl tracking-tight">Approach</h2>
@@ -173,7 +173,7 @@ export default async function HitDetailPage({
 
       {hit.id === "kiss-and-smile" ? (
         <section className="border-b hairline">
-          <div className="container-page py-12">
+          <div className="container-page py-10 md:py-12">
             <p className="text-sm text-[var(--color-ink-dim)]">
               The Kiss &amp; Smile HIT uses a site-specific FAS variant for lips —{" "}
               <Link
@@ -189,7 +189,7 @@ export default async function HitDetailPage({
       ) : null}
 
       <section>
-        <div className="container-page py-12">
+        <div className="container-page py-10 md:py-12">
           <Link
             href="/hits"
             className="text-sm text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"

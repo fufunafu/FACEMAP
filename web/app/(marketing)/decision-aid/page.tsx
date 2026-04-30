@@ -11,11 +11,11 @@ export default function DecisionAidPage() {
   return (
     <>
       <section className="border-b hairline">
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Decision tool aid
           </p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
+          <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
             Grade the radar. Land the HIT.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
@@ -28,7 +28,7 @@ export default function DecisionAidPage() {
       </section>
 
       <section>
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <DecisionAidExplorer />
         </div>
       </section>

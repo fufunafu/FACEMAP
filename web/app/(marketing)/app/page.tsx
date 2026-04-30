@@ -61,11 +61,11 @@ export default function AppPage() {
   return (
     <>
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             The app
           </p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
+          <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
             FaceMap is a digital FAS™.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
@@ -75,7 +75,7 @@ export default function AppPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
             What you get.
           </h2>
@@ -96,7 +96,7 @@ export default function AppPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             On iPhone
           </p>
@@ -121,7 +121,7 @@ export default function AppPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
@@ -145,7 +145,7 @@ export default function AppPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <div className="flex flex-col gap-2">
             <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
               v0.1 metrics
@@ -174,7 +174,7 @@ export default function AppPage() {
       </section>
 
       <section>
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">

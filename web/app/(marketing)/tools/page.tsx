@@ -18,11 +18,11 @@ export default function ToolsIndexPage() {
   return (
     <>
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Decision aids
           </p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
+          <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
             Nine tools for the AART-HIT workflow.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
@@ -38,7 +38,7 @@ export default function ToolsIndexPage() {
         const list = tools.filter((t) => t.group === g.id);
         return (
           <section key={g.id} className="border-b hairline">
-            <div className="container-page py-16">
+            <div className="container-page py-12 md:py-16">
               <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
                 {g.label}
               </p>
@@ -88,7 +88,7 @@ export default function ToolsIndexPage() {
       })}
 
       <section>
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <p className="text-[var(--color-ink-dim)]">
             The original{" "}
             <Link

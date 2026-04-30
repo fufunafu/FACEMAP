@@ -66,7 +66,7 @@ export default function ScalpGridPage() {
     <>
       <ToolHeader title={TOOL.title} resolves={TOOL.resolves} hue={TOOL.hue} />
       <section>
-        <div className="container-page py-12">
+        <div className="container-page py-10 md:py-12">
           <p className="max-w-2xl text-[var(--color-ink-dim)]">
             Cross-reference the SCALP layered anatomy with five treatment regions. Each cell lists the suggested product family per Nikolis et al., 2024.
           </p>

@@ -13,12 +13,12 @@ export default function LipAssessmentPage() {
   return (
     <>
       <section className="border-b hairline">
-        <div className="container-page grid gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+        <div className="container-page grid gap-8 py-14 md:gap-10 md:py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
               Lip Assessment Scale
             </p>
-            <h1 className="mt-4 font-display text-5xl tracking-tight md:text-6xl">
+            <h1 className="mt-4 font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
               A FAS for lips, specifically.
             </h1>
             <p className="mt-5 max-w-xl text-[var(--color-ink-dim)]">
@@ -35,7 +35,7 @@ export default function LipAssessmentPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
             The five categories.
           </h2>
@@ -78,7 +78,7 @@ export default function LipAssessmentPage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
             Three lip priorities.
           </h2>
@@ -105,7 +105,7 @@ export default function LipAssessmentPage() {
       </section>
 
       <section>
-        <div className="container-page py-16 text-center">
+        <div className="container-page py-12 md:py-16 text-center">
           <p className="text-[var(--color-ink-dim)]">
             Used inside the{" "}
             <Link

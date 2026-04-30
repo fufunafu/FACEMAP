@@ -11,7 +11,7 @@ export function ToolHeader({
 }) {
   return (
     <section className="border-b hairline">
-      <div className="container-page py-12">
+      <div className="container-page py-10 md:py-12">
         <Link
           href="/tools"
           className="text-sm text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"

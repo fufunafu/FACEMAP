@@ -15,7 +15,7 @@ export default function AgeSequencerPage() {
     <>
       <ToolHeader title={TOOL.title} resolves={TOOL.resolves} hue={TOOL.hue} />
       <section>
-        <div className="container-page py-12">
+        <div className="container-page py-10 md:py-12">
           <AgeSequencer />
         </div>
       </section>

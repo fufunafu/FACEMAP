@@ -25,8 +25,9 @@ export function LasRadar({ size = 420 }: { size?: number }) {
   return (
     <svg
       viewBox={`0 0 ${VIEW} ${VIEW}`}
-      width={size}
-      height={size}
+      width="100%"
+      height="auto"
+      style={{ maxWidth: size }}
       role="img"
       aria-label="Lip Assessment Scale (LAS) radar with five categories"
       className="select-none"

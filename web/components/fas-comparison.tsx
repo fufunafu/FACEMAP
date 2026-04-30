@@ -37,8 +37,9 @@ export function FasComparison({
   return (
     <svg
       viewBox={`0 0 ${VIEW} ${VIEW}`}
-      width={size}
-      height={size}
+      width="100%"
+      height="auto"
+      style={{ maxWidth: size }}
       role="img"
       aria-label="FAS visit-over-visit comparison radar"
       className="select-none"

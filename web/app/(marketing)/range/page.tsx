@@ -18,11 +18,11 @@ export default function RangePage() {
   return (
     <>
       <section className="border-b hairline">
-        <div className="container-page py-20">
+        <div className="container-page py-14 md:py-20">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
             Range
           </p>
-          <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
+          <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
             The four R&apos;s.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
@@ -32,7 +32,7 @@ export default function RangePage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {rList.map((r) => (
               <article
@@ -67,7 +67,7 @@ export default function RangePage() {
       </section>
 
       <section className="border-b hairline">
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
             Comparison.
           </h2>
@@ -104,7 +104,7 @@ export default function RangePage() {
       </section>
 
       <section>
-        <div className="container-page py-16">
+        <div className="container-page py-12 md:py-16">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
             NASHA vs OBT/XpresHAn.
           </h2>
