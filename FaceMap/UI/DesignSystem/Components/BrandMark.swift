@@ -11,6 +11,9 @@ struct BrandMark: View {
 
     var body: some View {
         VStack(spacing: spacing) {
+            LogoMark(size: logoSize)
+                .padding(.bottom, spacing / 2)
+
             Text("FACEMAP")
                 .font(wordmarkFont)
                 .tracking(tracking)
@@ -23,6 +26,14 @@ struct BrandMark: View {
             Text("by Dr Andreas Nikolis · MD, FRCSC")
                 .font(captionFont)
                 .foregroundStyle(Theme.inkDim)
+        }
+    }
+
+    private var logoSize: CGFloat {
+        switch size {
+        case .large:  return 64
+        case .medium: return 40
+        case .small:  return 22
         }
     }
 

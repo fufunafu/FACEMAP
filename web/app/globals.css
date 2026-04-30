@@ -15,6 +15,11 @@
   --color-domain-optical-fill: #3f4456;
   --color-domain-symmetry: #e9b5e0;
   --color-domain-structural: #a6b4dd;
+  --color-facet-skin: #c9bbee;
+  --color-facet-shape: #a6b4dd;
+  --color-facet-proportions: #7a8094;
+  --color-facet-symmetry: #e9b5e0;
+  --color-facet-expression: #f2c9a1;
 
   --radius-card: 16px;
   --radius-sheet: 24px;

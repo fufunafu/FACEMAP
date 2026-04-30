@@ -17,13 +17,27 @@ export const ink = {
   muted: "rgba(255,255,255,0.38)",
 } as const;
 
-/** Domain hues — one per quadrant of Dr Nikolis's Aesthetic Wheel. */
+/**
+ * Brand hues — also used as the 4 quadrants of the FaceMap logo mark.
+ * The website's conceptual framework is the 5-facet FAS™; these hues are
+ * mapped onto FAS facets in `content/fas.ts` (with peach added as the 5th).
+ */
 export const domainHues = {
   mechanical: "#C9BBEE",
   optical: "#7A8094",
   opticalFill: "#3F4456",
   symmetry: "#E9B5E0",
   structural: "#A6B4DD",
+  expression: "#F2C9A1",
+} as const;
+
+/** FAS facet hues — public name for the 5 hues used across the site. */
+export const facetHues = {
+  skinQuality: "#C9BBEE",
+  facialShape: "#A6B4DD",
+  proportions: "#7A8094",
+  symmetry: "#E9B5E0",
+  expression: "#F2C9A1",
 } as const;
 
 /** Severity → opacity ramp on the domain hue. Mirrors Theme.swift:62-86. */

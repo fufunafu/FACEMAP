@@ -1,10 +1,10 @@
 /**
  * Mirrors FaceMap/Analysis/Metrics/*.swift.
  * The five geometric metrics implemented in v0.1 of the iOS app.
- * Every metric is in the Symmetry & proportions domain.
+ * Each metric supports one of two FAS facets — Proportions or Symmetry.
  */
 
-import type { DomainId } from "./domains";
+import type { FacetId } from "./fas";
 
 export interface Metric {
   /** Matches the metric's `id` field in the Swift source. */
@@ -19,8 +19,8 @@ export interface Metric {
   target: string;
   /** Anatomical regions the metric can flag. */
   flags: string[];
-  /** The domain this metric belongs to (every v0.1 metric is `symmetry`). */
-  domain: DomainId;
+  /** Which FAS facet this metric supports. */
+  facet: FacetId;
 }
 
 export const metrics: Metric[] = [
@@ -32,7 +32,7 @@ export const metrics: Metric[] = [
       "Measures the three vertical segments — trichion → glabella, glabella → subnasale, subnasale → menton — and reports the worst-case deviation from one-third of total face height.",
     target: "Each third within ±5% of equal.",
     flags: ["Forehead", "Midface", "Upper lip", "Lower lip", "Chin"],
-    domain: "symmetry",
+    facet: "proportions",
   },
   {
     id: "facial.fifths",
@@ -42,7 +42,7 @@ export const metrics: Metric[] = [
       "Divides the face width at canthal level into five segments anchored on zygion, exocanthion, and endocanthion landmarks. Reports the worst deviation from 20% per fifth.",
     target: "Each fifth within ±10% of equal.",
     flags: ["Temples", "Midface"],
-    domain: "symmetry",
+    facet: "proportions",
   },
   {
     id: "facial.goldenRatio",
@@ -52,7 +52,7 @@ export const metrics: Metric[] = [
       "Computes mouth width ÷ nose width and lower-third height ÷ nose length, reporting the worst deviation from φ ≈ 1.618.",
     target: "Within ±10% of φ on both ratios.",
     flags: ["Upper lip", "Lower lip", "Perioral", "Chin"],
-    domain: "symmetry",
+    facet: "proportions",
   },
   {
     id: "ocular.canthalTilt",
@@ -62,7 +62,7 @@ export const metrics: Metric[] = [
       "Measures the angle from medial canthus to lateral canthus relative to horizontal, per side. A low or negative tilt flags tear-trough and midface regions.",
     target: "4° to 7° on each side.",
     flags: ["Tear trough (L/R)", "Midface (L/R)"],
-    domain: "symmetry",
+    facet: "symmetry",
   },
   {
     id: "facial.asymmetry",
@@ -81,6 +81,6 @@ export const metrics: Metric[] = [
       "Prejowl",
       "Jawline",
     ],
-    domain: "symmetry",
+    facet: "symmetry",
   },
 ];

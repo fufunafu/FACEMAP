@@ -1,74 +1,138 @@
 "use client";
 
 import { useState } from "react";
-import { AestheticWheel } from "./aesthetic-wheel";
+import { FasRadar } from "./fas-radar";
 import { SeverityRamp } from "./severity-ramp";
-import { domains, wheelOrder, type DomainId } from "@/content/domains";
+import {
+  facets,
+  facetOrder,
+  facetsList,
+  type FacetId,
+} from "@/content/fas";
+import { hits as hitsById } from "@/content/hits";
 import { metrics } from "@/content/metrics";
 
+const PRESET: Record<FacetId, number> = {
+  skinQuality: 1,
+  facialShape: 2,
+  proportions: 1,
+  symmetry: 2,
+  expression: 1,
+};
+
 export function DecisionAidExplorer() {
-  const [selected, setSelected] = useState<DomainId | null>("symmetry");
+  const [selected, setSelected] = useState<FacetId | null>("proportions");
+  const [values, setValues] = useState<Record<FacetId, number>>(PRESET);
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:items-start">
-      <div className="flex justify-center">
-        <AestheticWheel
+      <div className="flex flex-col items-center gap-6">
+        <FasRadar
           interactive
-          value={selected}
-          onValueChange={setSelected}
+          focused={selected}
+          onFocusChange={setSelected}
+          values={values}
           size={520}
+        />
+        <FacetGrader
+          selected={selected}
+          values={values}
+          setValues={setValues}
         />
       </div>
 
-      <div
+      <aside
         role="tabpanel"
         aria-live="polite"
         className="rounded-[var(--radius-sheet)] border hairline bg-[var(--color-surface)] p-7"
       >
         {selected ? (
-          <DomainPanel id={selected} />
+          <FacetPanel id={selected} grade={values[selected]} />
         ) : (
           <Placeholder onPick={setSelected} />
         )}
 
         <div className="mt-8 flex flex-wrap gap-2 border-t hairline pt-5">
-          {wheelOrder.map((id) => (
+          {facetOrder.map((id) => (
             <button
               key={id}
               onClick={() => setSelected(id)}
               className="rounded-full border hairline px-3 py-1 text-xs text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"
               style={{
                 borderColor:
-                  selected === id ? domains[id].hue : "rgba(255,255,255,0.12)",
-                color: selected === id ? domains[id].hue : undefined,
+                  selected === id ? facets[id].hue : "var(--color-hairline)",
+                color: selected === id ? facets[id].hue : undefined,
               }}
             >
-              {domains[id].name}
+              {facets[id].name}
             </button>
           ))}
         </div>
+      </aside>
+    </div>
+  );
+}
+
+function FacetGrader({
+  selected,
+  values,
+  setValues,
+}: {
+  selected: FacetId | null;
+  values: Record<FacetId, number>;
+  setValues: React.Dispatch<React.SetStateAction<Record<FacetId, number>>>;
+}) {
+  if (!selected) return null;
+  const f = facets[selected];
+  return (
+    <div className="w-full max-w-[520px] rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-4">
+      <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
+        Grade <span style={{ color: f.hue }}>{f.name}</span>
+      </p>
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        {[0, 1, 2, 3].map((g) => {
+          const active = values[selected] === g;
+          return (
+            <button
+              key={g}
+              onClick={() => setValues((v) => ({ ...v, [selected]: g }))}
+              className="rounded-[var(--radius-button)] border hairline px-3 py-2 text-sm transition"
+              style={{
+                borderColor: active ? f.hue : "var(--color-hairline)",
+                backgroundColor: active
+                  ? `color-mix(in srgb, ${f.hue} 18%, transparent)`
+                  : "transparent",
+                color: active ? "var(--color-ink)" : "var(--color-ink-dim)",
+              }}
+            >
+              <span className="num text-base">{g}</span>
+              <span className="ml-2 text-xs">
+                {["None", "Mild", "Moderate", "Severe"][g]}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
-function Placeholder({ onPick }: { onPick: (id: DomainId) => void }) {
+function Placeholder({ onPick }: { onPick: (id: FacetId) => void }) {
   return (
     <div>
-      <h2 className="text-2xl">Pick a quadrant</h2>
+      <h2 className="text-2xl">Pick a facet</h2>
       <p className="mt-2 text-[var(--color-ink-dim)]">
-        Click any quadrant of the wheel — or use the arrow keys — to see what it
-        covers, which regions FaceMap can flag in it, and how severity is
-        encoded.
+        Click a facet name on the radar — or any chip below — to see its FAS
+        parameters, the HIT(s) that address it, and the severity ramp.
       </p>
       <div className="mt-5 flex flex-wrap gap-2">
-        {wheelOrder.map((id) => (
+        {facetsList.map((f) => (
           <button
-            key={id}
-            onClick={() => onPick(id)}
-            className="rounded-[var(--radius-button)] border hairline px-3 py-2 text-sm transition hover:border-white/30"
+            key={f.id}
+            onClick={() => onPick(f.id)}
+            className="rounded-[var(--radius-button)] border hairline px-3 py-2 text-sm transition hover:border-[var(--color-ink-dim)]"
           >
-            {domains[id].name}
+            {f.name}
           </button>
         ))}
       </div>
@@ -76,57 +140,76 @@ function Placeholder({ onPick }: { onPick: (id: DomainId) => void }) {
   );
 }
 
-function DomainPanel({ id }: { id: DomainId }) {
-  const d = domains[id];
-  const linked = metrics.filter((m) => m.domain === id);
+function FacetPanel({ id, grade }: { id: FacetId; grade: number }) {
+  const f = facets[id];
+  const linked = metrics.filter((m) => m.facet === id);
+  const linkedHits = f.hits.map((h) => hitsById[h as keyof typeof hitsById]);
   return (
     <div>
       <span
         className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] uppercase tracking-wider"
-        style={{ backgroundColor: `${d.hue}22`, color: d.hue }}
+        style={{ backgroundColor: `${f.hue}26`, color: f.hue }}
       >
         <span
           className="size-2 rounded-full"
-          style={{ backgroundColor: d.hue }}
+          style={{ backgroundColor: f.hue }}
           aria-hidden="true"
         />
-        Quadrant {d.quadrant + 1}
+        FAS facet · grade {grade}
       </span>
-      <h2 className="mt-3 text-3xl">{d.name}</h2>
-      <p className="mt-2 text-[var(--color-ink-dim)]">{d.blurb}</p>
+      <h2 className="mt-3 text-3xl">{f.name}</h2>
+      <p className="mt-2 text-[var(--color-ink-dim)]">{f.blurb}</p>
 
-      <Section label="Sub-concerns">
+      <Section label="Graded parameters">
         <ul className="space-y-1.5 text-[var(--color-ink-dim)]">
-          {d.subConcerns.map((c) => (
-            <li key={c} className="flex items-start gap-2">
+          {f.parameters.map((p) => (
+            <li key={p} className="flex items-start gap-2">
               <span
                 className="mt-1.5 size-1.5 rounded-full"
-                style={{ backgroundColor: d.hue }}
+                style={{ backgroundColor: f.hue }}
                 aria-hidden="true"
               />
-              {c}
+              {p}
             </li>
           ))}
         </ul>
       </Section>
 
-      <Section label="Regions the app can flag in this quadrant">
-        <p className="text-[var(--color-ink-dim)]">
-          {d.exampleRegions.join(" · ")}
-        </p>
-      </Section>
-
-      <Section label="Severity encoding">
+      <Section label="Severity ramp">
         <p className="mb-4 text-sm text-[var(--color-ink-dim)]">
-          Severity is the opacity of the domain hue — no separate red/amber/green ramp.
+          0 = None, 1 = Mild, 2 = Moderate, 3 = Severe. Severity is the opacity of the facet hue — outliers identify priorities.
         </p>
-        <SeverityRamp domain={id} />
+        <SeverityRamp hue={f.hue} />
       </Section>
 
-      <Section label="v0.1 metrics in this quadrant">
+      <Section label="HIT(s) that address this facet">
+        <ul className="space-y-2">
+          {linkedHits.map((h) => (
+            <li
+              key={h.id}
+              className="rounded-md border hairline bg-[var(--color-surface-raised)] p-3"
+            >
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium">{h.name}</div>
+                <span
+                  className="size-2 rounded-full"
+                  style={{ backgroundColor: h.hue }}
+                  aria-hidden="true"
+                />
+              </div>
+              <div className="mt-1 text-xs text-[var(--color-ink-dim)]">
+                {h.region} · {h.blurb}
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      <Section label="v0.1 FaceMap metrics that quantify this facet">
         {linked.length === 0 ? (
           <p className="rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-sm text-[var(--color-ink-muted)]">
-            None yet. Quantified metrics for this quadrant are on the v0.1 roadmap. The framework is published in full; v0.1 of the app measures the Symmetry &amp; proportions quadrant.
+            Graded by direct observation. v0.1 of the FaceMap app does not yet
+            quantify this facet — it is on the roadmap.
           </p>
         ) : (
           <ul className="space-y-2">

@@ -1,53 +1,60 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { AestheticWheel } from "@/components/aesthetic-wheel";
-import { DomainCard } from "@/components/domain-card";
+import { FasRadar } from "@/components/fas-radar";
+import { FacetCard } from "@/components/facet-card";
 import { SeverityRamp } from "@/components/severity-ramp";
-import { domainsList } from "@/content/domains";
+import { facetsList } from "@/content/fas";
 
 export const metadata: Metadata = {
-  title: "The Nikolis four-domain framework",
+  title: "FAS™ — Facial Assessment Scale",
   description:
-    "Mechanical behaviour, Optical properties, Symmetry & proportions, Structural volume — Dr Andreas Nikolis's framework, as implemented in FaceMap.",
+    "The Facial Assessment Scale (FAS™) — five facets graded 0 to 3, plotted on a radar chart. Skin quality, Facial shape, Proportions, Symmetry, Expression.",
 };
 
-export default function FrameworkPage() {
+export default function FasPage() {
   return (
     <>
       <section className="border-b hairline">
         <div className="container-page grid gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-              The framework
+              Assessment
             </p>
             <h1 className="mt-4 font-display text-5xl tracking-tight md:text-6xl">
-              Four domains of the aesthetic face.
+              The Facial Assessment Scale.
             </h1>
             <p className="mt-5 max-w-xl text-[var(--color-ink-dim)]">
-              The published wheel divides every observable concern into four
-              domains. FaceMap inherits this structure end-to-end — from the
-              colour of a flagged region to the way severity is encoded.
+              Five facets — Skin quality, Facial shape, Proportions, Symmetry, Expression. Each graded 0 (None) → 3 (Severe). The result plots as a circular figure that grows outward with severity. Outliers identify priorities; comparing across visits tracks progress.
+            </p>
+            <p className="mt-3 max-w-xl text-sm text-[var(--color-ink-muted)]">
+              Per Nikolis et al., Clin Cosmet Investig Dermatol 2024:17, 2051–2069.
             </p>
           </div>
           <div className="flex justify-center lg:justify-end">
-            <AestheticWheel size={420} />
+            <FasRadar
+              size={420}
+              values={{
+                skinQuality: 1,
+                facialShape: 2,
+                proportions: 1,
+                symmetry: 2,
+                expression: 1,
+              }}
+            />
           </div>
         </div>
       </section>
 
       <section className="border-b hairline">
         <div className="container-page py-20">
-          <div className="grid gap-4 md:grid-cols-2">
-            {domainsList.map((d) => (
-              <DomainCard key={d.id} domain={d} />
+          <h2 className="font-display text-3xl tracking-tight md:text-4xl">
+            The five facets.
+          </h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {facetsList.map((f) => (
+              <FacetCard key={f.id} facet={f} />
             ))}
           </div>
-          <p className="mt-8 max-w-2xl text-sm text-[var(--color-ink-dim)]">
-            Every metric in v0.1 of the iOS app is in the Symmetry &amp;
-            proportions quadrant. The other three quadrants are part of the
-            published framework and are on the v0.1 roadmap. The wheel
-            visualisation itself works for the full framework.
-          </p>
         </div>
       </section>
 
@@ -56,31 +63,27 @@ export default function FrameworkPage() {
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-                Severity encoding
+                Severity
               </p>
               <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
-                Opacity of the domain hue, not red &middot; amber &middot; green.
+                0 · 1 · 2 · 3 — None to Severe.
               </h2>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                Inside a quadrant, severity is the opacity of that quadrant&apos;s
-                hue: 0% for normal, 38% for mild, 64% for moderate, 100% for
-                significant. The eye reads severity as <em>more domain</em>,
-                not as a separate alarm colour.
+                Each facet is graded on the same 4-point scale. As parameters are graded, the FAS figure begins to appear. With each subsequent treatment, the lines of the FAS move closer to point 0 (the centre), indicating milder deficits.
               </p>
               <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
-                Tokens mirrored from <code className="num">Theme.swift</code>{" "}
-                in the iOS app.
+                Severity is encoded as opacity of each facet&apos;s hue — outliers identify priorities at a glance.
               </p>
             </div>
             <div className="rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-7">
               <div className="space-y-7">
-                {domainsList.map((d) => (
-                  <div key={d.id}>
+                {facetsList.map((f) => (
+                  <div key={f.id}>
                     <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
-                      {d.name}
+                      {f.name}
                     </p>
                     <div className="mt-3">
-                      <SeverityRamp domain={d.id} />
+                      <SeverityRamp hue={f.hue} />
                     </div>
                   </div>
                 ))}
@@ -93,11 +96,10 @@ export default function FrameworkPage() {
       <section>
         <div className="container-page py-16 text-center">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">
-            Ready to walk the wheel?
+            Grade the radar yourself.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-[var(--color-ink-dim)]">
-            The decision aid lets you click through each quadrant and see what
-            FaceMap can flag inside it.
+            The decision aid lets you grade each facet and see which HIT(s) address the priorities.
           </p>
           <Link
             href="/decision-aid"

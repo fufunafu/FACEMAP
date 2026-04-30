@@ -1,14 +1,20 @@
 import Link from "next/link";
-import { AestheticWheel } from "@/components/aesthetic-wheel";
-import { DomainCard } from "@/components/domain-card";
-import { domainsList } from "@/content/domains";
+import { FasRadar } from "@/components/fas-radar";
+import { FacetCard } from "@/components/facet-card";
+import { HitCard } from "@/components/hit-card";
+import { facetsList } from "@/content/fas";
+import { hitsList } from "@/content/hits";
+import { aart } from "@/content/aart-hit";
+import { rList } from "@/content/range";
 
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <FrameworkTeaser />
-      <Workflow />
+      <AartIntro />
+      <FasTeaser />
+      <HitsTeaser />
+      <RangeTeaser />
       <Built />
       <CTA />
     </>
@@ -21,19 +27,17 @@ function Hero() {
       <div className="container-page grid gap-10 py-20 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-16 lg:py-28">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-            For licensed aesthetic practitioners
+            AART-HIT™ · For licensed aesthetic practitioners
           </p>
           <h1 className="mt-5 text-balance font-display text-5xl leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
-            Facial aesthetic analysis,{" "}
-            <span className="italic text-[var(--color-domain-symmetry)]">
-              computed.
+            Turn your AART™ into a{" "}
+            <span className="italic text-[var(--color-facet-symmetry)]">
+              HIT™
             </span>
+            .
           </h1>
           <p className="mt-6 max-w-xl text-balance text-lg text-[var(--color-ink-dim)]">
-            FaceMap captures a 3D face mesh on iPhone, evaluates Dr Andreas
-            Nikolis&apos;s four-domain Facial Aesthetic framework, and flags
-            anatomical regions on an interactive 3D model — so you can plan
-            with the geometry already done.
+            FaceMap implements Dr Andreas Nikolis&apos;s AART-HIT™ methodology — Assessment, Anatomy, Range, Treatment — combining a complete range of aesthetic injectables into five Holistic Individualised Treatments. The iOS app is the digital companion to the FAS™ diagnostic tool.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
@@ -44,7 +48,7 @@ function Hero() {
             </Link>
             <Link
               href="/decision-aid"
-              className="rounded-[var(--radius-button)] border hairline px-5 py-3 text-sm transition hover:border-white/40"
+              className="rounded-[var(--radius-button)] border hairline px-5 py-3 text-sm transition hover:border-[var(--color-ink-dim)]"
             >
               Try the decision aid
             </Link>
@@ -56,41 +60,59 @@ function Hero() {
         </div>
 
         <div className="flex justify-center lg:justify-end">
-          <AestheticWheel size={420} />
+          <FasRadar
+            size={420}
+            values={{
+              skinQuality: 1,
+              facialShape: 2,
+              proportions: 1,
+              symmetry: 2,
+              expression: 1,
+            }}
+          />
         </div>
       </div>
     </section>
   );
 }
 
-function FrameworkTeaser() {
+function AartIntro() {
   return (
     <section className="border-b hairline">
       <div className="container-page py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-            The framework
+            The methodology
           </p>
           <h2 className="font-display text-4xl tracking-tight md:text-5xl">
-            Four domains. One language for the aesthetic face.
+            Four steps. One language. Reproducible outcomes.
           </h2>
           <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
-            Dr Nikolis&apos;s four-domain framework gives every observation a
-            home. FaceMap evaluates each domain in turn and reports its findings
-            on the same wheel published in the literature.
+            AART-HIT™ is the systematic methodology Nikolis et al. published in <em>Clinical, Cosmetic and Investigational Dermatology</em> 2024. It walks the practitioner from full-face assessment through layered anatomy, the product range, and finally a Holistic Individualised Treatment.
           </p>
         </div>
         <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {domainsList.map((d) => (
-            <DomainCard key={d.id} domain={d} />
+          {aart.map((step) => (
+            <article
+              key={step.letter}
+              className="rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-6"
+            >
+              <span className="font-display text-5xl tracking-tight text-[var(--color-ink-dim)]">
+                {step.glyph}
+              </span>
+              <h3 className="mt-3 text-2xl">{step.title}</h3>
+              <p className="mt-2 text-sm text-[var(--color-ink-dim)]">
+                {step.purpose}
+              </p>
+            </article>
           ))}
         </div>
         <div className="mt-10">
           <Link
-            href="/framework"
+            href="/aart-hit"
             className="text-sm text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"
           >
-            Explore each domain →
+            Read the full AART-HIT methodology →
           </Link>
         </div>
       </div>
@@ -98,55 +120,112 @@ function FrameworkTeaser() {
   );
 }
 
-const STEPS = [
-  {
-    n: "01",
-    title: "Capture",
-    body:
-      "Use the iPhone TrueDepth camera to capture a high-fidelity 3D face mesh in seconds. On-device, no cloud upload.",
-  },
-  {
-    n: "02",
-    title: "Analyse",
-    body:
-      "FaceMap evaluates five geometric metrics — facial thirds, fifths, golden ratio, canthal tilt, and surface asymmetry — and flags anatomical regions.",
-  },
-  {
-    n: "03",
-    title: "Plan",
-    body:
-      "Severity is encoded as opacity of the domain hue, layered onto the 3D model. Save the case under a non-PII patient code.",
-  },
-];
-
-function Workflow() {
+function FasTeaser() {
   return (
     <section className="border-b hairline">
       <div className="container-page py-20">
         <div className="flex flex-col gap-2">
           <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-            How it works
+            Assessment
           </p>
           <h2 className="font-display text-4xl tracking-tight md:text-5xl">
-            Capture &middot; Analyse &middot; Plan.
+            FAS™ — five facets, graded 0 to 3.
           </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            The Facial Assessment Scale grades five facets — Skin quality, Facial shape, Proportions, Symmetry, Expression — on a 0–3 severity scale. The results plot as a circular figure that shrinks toward the centre as treatments take effect.
+          </p>
         </div>
-        <ol className="mt-10 grid gap-6 md:grid-cols-3">
-          {STEPS.map((s) => (
-            <li
-              key={s.n}
-              className="rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-6"
-            >
-              <span className="num text-[11px] tracking-widest text-[var(--color-ink-muted)]">
-                {s.n}
-              </span>
-              <h3 className="mt-3 text-2xl">{s.title}</h3>
-              <p className="mt-2 text-sm text-[var(--color-ink-dim)]">
-                {s.body}
-              </p>
-            </li>
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {facetsList.map((f) => (
+            <FacetCard key={f.id} facet={f} />
           ))}
-        </ol>
+        </div>
+        <div className="mt-10">
+          <Link
+            href="/fas"
+            className="text-sm text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"
+          >
+            Explore the FAS in depth →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function HitsTeaser() {
+  return (
+    <section className="border-b hairline">
+      <div className="container-page py-20">
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+            Treatment
+          </p>
+          <h2 className="font-display text-4xl tracking-tight md:text-5xl">
+            Five HITs™ for five treatment regions.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            Each HIT is a Holistic Individualised Treatment combining the right products from the range — relaxers, fillers, skinboosters, biostimulators — for a specific region.
+          </p>
+        </div>
+        <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          {hitsList.map((h) => (
+            <HitCard key={h.id} hit={h} href={`/hits/${h.id}`} />
+          ))}
+        </div>
+        <div className="mt-10">
+          <Link
+            href="/hits"
+            className="text-sm text-[var(--color-ink-dim)] transition hover:text-[var(--color-ink)]"
+          >
+            See all five HITs →
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RangeTeaser() {
+  return (
+    <section className="border-b hairline">
+      <div className="container-page py-20">
+        <div className="flex flex-col gap-2">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+            Range
+          </p>
+          <h2 className="font-display text-4xl tracking-tight md:text-5xl">
+            Relax · Refine · Refresh · Renew.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            The Galderma portfolio organised as four R&apos;s — neuromodulators, HA fillers (NASHA &amp; OBT/XpresHAn), Skinboosters, and biostimulators (PLLA-SCA).
+          </p>
+        </div>
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {rList.map((r) => (
+            <article
+              key={r.id}
+              className="rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-6"
+              style={{
+                backgroundImage: `linear-gradient(180deg, ${r.hue}1A 0%, transparent 60%)`,
+              }}
+            >
+              <span
+                className="font-display text-5xl tracking-tight"
+                style={{ color: r.hue }}
+              >
+                R
+              </span>
+              <h3 className="mt-2 text-2xl">{r.title}</h3>
+              <p className="mt-1 text-xs uppercase tracking-wider text-[var(--color-ink-muted)]">
+                {r.family}
+              </p>
+              <p className="mt-3 text-sm text-[var(--color-ink-dim)]">
+                {r.description}
+              </p>
+            </article>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -164,10 +243,7 @@ function Built() {
             By Dr Andreas Nikolis &amp; team.
           </h2>
           <p className="mt-4 text-[var(--color-ink-dim)]">
-            FaceMap implements the four-domain Facial Aesthetic framework
-            developed by Dr Andreas Nikolis and his team. Every metric, every
-            colour, every disclaimer was designed to fit the way clinicians
-            already work.
+            FaceMap implements the AART-HIT™ methodology developed and validated by Dr Andreas Nikolis and his team — published in <em>Clinical, Cosmetic and Investigational Dermatology</em> in 2024. Every facet, every HIT, every product mapping was designed around how clinicians already work.
           </p>
           <Link
             href="/about"
@@ -178,12 +254,10 @@ function Built() {
         </div>
         <blockquote className="rounded-[var(--radius-sheet)] border hairline bg-[var(--color-surface)] p-8">
           <p className="font-display text-2xl leading-snug text-[var(--color-ink)]">
-            &ldquo;Geometric measurement should be a starting point, not a
-            shortcut. FaceMap does the math so the practitioner can focus on the
-            judgment.&rdquo;
+            &ldquo;A standardised system for facial assessment allows providers to create a holistic, individualised, and reproducible long-term treatment plan.&rdquo;
           </p>
           <footer className="mt-5 text-sm text-[var(--color-ink-dim)]">
-            — Dr Andreas Nikolis
+            — Nikolis et al., Clin Cosmet Investig Dermatol 2024:17, 2051–2069
           </footer>
         </blockquote>
       </div>
@@ -196,11 +270,10 @@ function CTA() {
     <section>
       <div className="container-page py-20 text-center">
         <h2 className="mx-auto max-w-2xl font-display text-4xl tracking-tight md:text-5xl">
-          Ready to put the geometry on autopilot?
+          Walk the AART. Land the HIT.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-[var(--color-ink-dim)]">
-          FaceMap runs on iPhone with a TrueDepth front camera. Practitioner
-          access required.
+          FaceMap brings the FAS™ to iPhone. Capture, grade, and track every facet on a single radar — built for licensed practitioners.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link
@@ -211,7 +284,7 @@ function CTA() {
           </Link>
           <Link
             href="/methodology"
-            className="rounded-[var(--radius-button)] border hairline px-5 py-3 text-sm transition hover:border-white/40"
+            className="rounded-[var(--radius-button)] border hairline px-5 py-3 text-sm transition hover:border-[var(--color-ink-dim)]"
           >
             Read the methodology
           </Link>

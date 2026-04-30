@@ -100,6 +100,13 @@ struct FaceMeshOverlay: UIViewRepresentable {
     /// Defaults to `.symmetry` for any region not present.
     var regionDomain: [FacialRegion: FaceDomain] = [:]
     let controller: FaceMeshController
+    /// When `false`, no pan/pinch gesture recognisers are attached. Use for thumbnail
+    /// previews embedded in scrollable layouts so the mesh doesn't intercept scrolling.
+    var interactive: Bool = true
+    /// Background colour of the RealityKit viewport. Defaults to `Theme.meshCanvas` (black —
+    /// the deliberate "spotlight" treatment used in the full-screen viewer). Pass
+    /// `Theme.surface` for thumbnail previews that should blend into a card.
+    var backgroundColor: UIColor = UIColor(Theme.meshCanvas)
 
     final class Coordinator: NSObject {
         weak var controller: FaceMeshController?
@@ -141,21 +148,23 @@ struct FaceMeshOverlay: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ARView {
         let view = ARView(frame: .zero, cameraMode: .nonAR, automaticallyConfigureSession: false)
-        view.environment.background = .color(.black)
+        view.environment.background = .color(backgroundColor)
 
-        let pan = UIPanGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handlePan(_:))
-        )
-        pan.minimumNumberOfTouches = 1
-        pan.maximumNumberOfTouches = 1
-        view.addGestureRecognizer(pan)
+        if interactive {
+            let pan = UIPanGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handlePan(_:))
+            )
+            pan.minimumNumberOfTouches = 1
+            pan.maximumNumberOfTouches = 1
+            view.addGestureRecognizer(pan)
 
-        let pinch = UIPinchGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handlePinch(_:))
-        )
-        view.addGestureRecognizer(pinch)
+            let pinch = UIPinchGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handlePinch(_:))
+            )
+            view.addGestureRecognizer(pinch)
+        }
 
         rebuild(into: view)
         return view

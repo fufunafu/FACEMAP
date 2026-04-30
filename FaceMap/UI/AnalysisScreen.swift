@@ -1,6 +1,11 @@
 import SwiftUI
 import SwiftData
 
+/// Overview-and-drill-in redesign (replaces the 4-pane layout).
+/// - Header card (`SummaryHeader`) with thumbnail mesh, label/date, and `WheelGlyph`
+/// - One `CategoryRow` per non-empty `FaceDomain`; tap pushes `DomainDetailScreen`
+/// - Notes / Annotation pins entry rows present sheets
+/// - Toolbar (calibrate, annotations, export PDF, save) preserved verbatim
 struct AnalysisScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var store: CaseStore
@@ -12,29 +17,14 @@ struct AnalysisScreen: View {
     @State private var results: [MetricResult] = []
     @State private var saveLabel = ""
     @State private var showingSaveSheet = false
-    @State private var selectedRegion: FacialRegion?
-    @State private var pane: Pane = .wheel
-    @State private var focusedDomain: FaceDomain? = nil
     @State private var notes: String = ""
     @State private var notesLoaded = false
     @State private var pins: [AnnotationPin] = []
     @State private var pinsLoaded = false
     @State private var showingAnnotations = false
+    @State private var showingNotes = false
+    @State private var showingFullscreenMesh = false
     @State private var pdfShareItem: PDFShareItem?
-    @StateObject private var meshController = FaceMeshController()
-
-    private enum Pane: String, CaseIterable, Identifiable {
-        case wheel, mesh, regions, notes
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .wheel:   return "Wheel"
-            case .mesh:    return "Mesh"
-            case .regions: return "Regions"
-            case .notes:   return "Notes"
-            }
-        }
-    }
 
     private var regionSeverity: [FacialRegion: MetricResult.Severity] {
         results.flaggedRegionsBySeverity
@@ -44,80 +34,68 @@ struct AnalysisScreen: View {
         results.regionDomainsByWorstSeverity
     }
 
+    /// Domains that have at least one metric in the current registry.
+    private var populatedDomains: [FaceDomain] {
+        FaceDomain.allCases.filter { d in
+            results.contains { $0.domain == d }
+        }
+    }
+
+    /// Domains the registry doesn't (yet) cover. Rendered as a single muted footnote.
+    private var unpopulatedDomains: [FaceDomain] {
+        FaceDomain.allCases.filter { d in
+            !results.contains { $0.domain == d }
+        }
+    }
+
+    private var headerLabel: String {
+        existingCase?.label ?? "Current capture"
+    }
+
+    private var visitDate: Date? {
+        existingCase?.createdAt ?? face.timestamp
+    }
+
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                header
+            ScrollView {
+                VStack(spacing: 14) {
+                    SummaryHeader(
+                        face: face,
+                        label: headerLabel,
+                        visitDate: visitDate,
+                        results: results,
+                        regionSeverity: regionSeverity,
+                        regionDomain: regionDomain,
+                        onOpenFullscreen: { showingFullscreenMesh = true }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
 
-                Picker("View", selection: $pane) {
-                    ForEach(Pane.allCases) { p in Text(p.label).tag(p) }
+                    findingsSection
+
+                    moreSection
+
+                    DisclaimerBanner()
+                        .padding(.top, 6)
                 }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
-
-                paneContent
-                    .frame(maxHeight: .infinity)
-
-                DisclaimerBanner()
+                .padding(.bottom, 16)
             }
         }
         .navigationTitle(existingCase?.label ?? "Analysis")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if let _ = existingCase {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        exportPDF()
-                    } label: {
-                        Image(systemName: "square.and.arrow.up")
-                    }
-                    .foregroundStyle(Theme.ink)
-                    .accessibilityLabel("Export plan")
-                }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showingAnnotations = true
-                } label: {
-                    Image(systemName: "mappin")
-                        .overlay(alignment: .topTrailing) {
-                            if !pins.isEmpty {
-                                Text("\(pins.count)")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(Theme.canvas)
-                                    .padding(.horizontal, 4).padding(.vertical, 1)
-                                    .background(Theme.ink, in: Capsule())
-                                    .offset(x: 6, y: -6)
-                            }
-                        }
-                        .accessibilityLabel("Annotation pins")
-                }
-                .foregroundStyle(Theme.ink)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                NavigationLink {
-                    CalibrationScreen(face: face) {
-                        results = MetricRegistry.defaultRegistry()
-                            .evaluateAll(on: AnalyzableFace(face))
-                    }
-                } label: {
-                    Image(systemName: "scope")
-                        .accessibilityLabel("Calibrate landmarks")
-                }
-                .foregroundStyle(Theme.ink)
-            }
-            if existingCase == nil {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") { showingSaveSheet = true }
-                        .foregroundStyle(Theme.ink)
-                }
-            }
-        }
+        .toolbar { toolbarContent }
         .sheet(isPresented: $showingSaveSheet) { saveSheet }
+        .sheet(isPresented: $showingFullscreenMesh) {
+            MeshFullScreen(
+                face: face,
+                regionSeverity: regionSeverity,
+                regionDomain: regionDomain
+            )
+        }
+        .sheet(isPresented: $showingNotes) { notesSheet }
         .sheet(isPresented: $showingAnnotations) {
             AnnotationSheet(face: face, pins: $pins) {
                 if let c = existingCase {
@@ -129,10 +107,6 @@ struct AnalysisScreen: View {
         }
         .sheet(item: $pdfShareItem) { item in
             ShareSheet(items: [item.url])
-        }
-        .sheet(item: $selectedRegion) { region in
-            RegionDetailView(region: region, allResults: results)
-                .presentationDetents([.medium, .large])
         }
         .task {
             results = MetricRegistry.defaultRegistry()
@@ -147,7 +121,6 @@ struct AnalysisScreen: View {
             }
         }
         .onChange(of: notes) { _, newValue in
-            // Persist as the user types, only when bound to a saved case.
             if let c = existingCase {
                 c.notes = newValue
                 try? store.context.save()
@@ -155,284 +128,168 @@ struct AnalysisScreen: View {
         }
     }
 
-    // MARK: - Header (mesh + wheel side by side)
-
-    private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ZStack(alignment: .bottom) {
-                FaceMeshOverlay(
-                    face: face,
-                    regionSeverity: regionSeverity,
-                    regionDomain: regionDomain,
-                    controller: meshController
-                )
-                .frame(maxWidth: .infinity)
-                .frame(height: 220)
-
-                viewerControls
-                    .padding(8)
-            }
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
-
-            AestheticWheel(
-                results: results,
-                diameter: 180,
-                showsLabels: false,
-                onTapDomain: { d in
-                    focusedDomain = (focusedDomain == d) ? nil : d
-                    pane = .wheel
-                }
-            )
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 8)
-    }
-
-    // MARK: - Pane content
+    // MARK: - Findings
 
     @ViewBuilder
-    private var paneContent: some View {
-        switch pane {
-        case .wheel:   wheelPane
-        case .mesh:    meshPane
-        case .regions: regionsPane
-        case .notes:   notesPane
-        }
-    }
-
-    // MARK: Wheel pane — domain breakdown
-
-    private var wheelPane: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if let f = focusedDomain {
-                    HStack(spacing: 8) {
-                        Text("Filtered: \(f.displayName)")
-                            .font(Type.caption)
-                            .foregroundStyle(Theme.inkDim)
-                        Spacer()
-                        Button("Clear") { focusedDomain = nil }
-                            .font(Type.caption)
-                            .foregroundStyle(Theme.ink)
-                    }
+    private var findingsSection: some View {
+        if !results.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("FINDINGS BY DOMAIN")
+                    .sectionHeaderStyle()
                     .padding(.horizontal, 16)
-                }
 
-                ForEach(domainsToShow) { d in
-                    domainSection(d)
-                }
-            }
-            .padding(.bottom, 16)
-        }
-    }
-
-    private var domainsToShow: [FaceDomain] {
-        if let f = focusedDomain { return [f] }
-        return FaceDomain.allCases
-    }
-
-    private func domainSection(_ d: FaceDomain) -> some View {
-        let inDomain = results.filter { $0.domain == d }
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                Circle().fill(d.hue).frame(width: 8, height: 8)
-                Text(d.displayName.uppercased())
-                    .font(Type.sectionHeader)
-                    .tracking(1.2)
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-
-            if inDomain.isEmpty {
-                Text("No metrics yet for this domain — coming in v0.3.")
-                    .font(Type.caption)
-                    .foregroundStyle(Theme.inkMuted)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.surface)
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
-                    .padding(.horizontal, 16)
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(inDomain, id: \.metricId) { r in
-                        MetricRow(
-                            result: r,
-                            domain: r.domain,
-                            valueText: formatValue(r)
-                        )
-                        .background(Theme.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
-
-                        if r.metricId == AsymmetryMetric.id {
-                            AsymmetryDivergentChart(
-                                result: r,
-                                pairs: AsymmetryDivergentChart.computePairs(
-                                    from: AnalyzableFace(face)
-                                )
+                VStack(spacing: 8) {
+                    ForEach(populatedDomains) { d in
+                        NavigationLink {
+                            DomainDetailScreen(
+                                domain: d,
+                                face: face,
+                                allResults: results,
+                                regionSeverity: regionSeverity,
+                                regionDomain: regionDomain,
+                                valueFormatter: formatValue
+                            )
+                        } label: {
+                            CategoryRow(
+                                domain: d,
+                                results: results.filter { $0.domain == d },
+                                valueFormatter: formatValue
                             )
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 16)
-            }
-        }
-    }
 
-    // MARK: Mesh pane — full-bleed mesh
-
-    private var meshPane: some View {
-        ZStack(alignment: .bottom) {
-            FaceMeshOverlay(
-                face: face,
-                regionSeverity: regionSeverity,
-                regionDomain: regionDomain,
-                controller: meshController
-            )
-            .background(Theme.canvas)
-
-            domainLegend
-                .padding(.bottom, 12)
-        }
-    }
-
-    private var domainLegend: some View {
-        HStack(spacing: 14) {
-            ForEach(FaceDomain.allCases) { d in
-                HStack(spacing: 6) {
-                    Circle().fill(d.hue).frame(width: 8, height: 8)
-                    Text(legendLabel(for: d))
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.ink)
+                if !unpopulatedDomains.isEmpty {
+                    Text(unpopulatedFootnote)
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkMuted)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
                 }
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
     }
 
-    private func legendLabel(for d: FaceDomain) -> String {
-        switch d {
-        case .mechanical: return "MECH"
-        case .optical:    return "OPT"
-        case .symmetry:   return "SYM"
-        case .structural: return "STR"
+    private var unpopulatedFootnote: String {
+        let names = unpopulatedDomains.map { $0.displayName }
+        let joined: String
+        switch names.count {
+        case 0: return ""
+        case 1: joined = names[0]
+        case 2: joined = "\(names[0]) and \(names[1])"
+        default: joined = names.dropLast().joined(separator: ", ") + ", and " + names.last!
+        }
+        return "\(joined) metrics arrive in v0.3."
+    }
+
+    // MARK: - More (notes + pins entry rows)
+
+    private var moreSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("MORE")
+                .sectionHeaderStyle()
+                .padding(.horizontal, 16)
+
+            VStack(spacing: 8) {
+                Button { showingNotes = true } label: {
+                    moreRow(
+                        icon: "square.and.pencil",
+                        title: "Notes",
+                        subtitle: notes.isEmpty ? "Add visit notes" : trimmedPreview(notes)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Button { showingAnnotations = true } label: {
+                    moreRow(
+                        icon: "mappin.and.ellipse",
+                        title: "Annotation pins",
+                        subtitle: pins.isEmpty ? "Drop pins on the mesh" : "\(pins.count) pin\(pins.count == 1 ? "" : "s")"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 16)
         }
     }
 
-    // MARK: Regions pane
+    private func moreRow(icon: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16, weight: .regular))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 28, height: 28)
+                .background(Theme.surfaceRaised, in: Circle())
 
-    private var regionsPane: some View {
-        RegionHeatmapView(
-            regionSeverity: regionSeverity,
-            regionDomain: regionDomain,
-            onSelect: { selectedRegion = $0 }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(Type.metricName)
+                    .foregroundStyle(Theme.ink)
+                Text(subtitle)
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.inkDim)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.inkMuted)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
+                .stroke(Theme.hairline, lineWidth: 1)
         )
     }
 
-    // MARK: Notes pane
-
-    private var notesPane: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("CLINICIAN NOTES").sectionHeaderStyle()
-                ZStack(alignment: .topLeading) {
-                    if notes.isEmpty {
-                        Text("Notes for this visit (no PII).")
-                            .font(Type.body)
-                            .foregroundStyle(Theme.inkMuted)
-                            .padding(12)
-                            .allowsHitTesting(false)
-                    }
-                    TextEditor(text: $notes)
-                        .frame(minHeight: 160)
-                        .scrollContentBackground(.hidden)
-                        .padding(8)
-                        .font(Type.body)
-                        .foregroundStyle(Theme.ink)
-                }
-                .background(Theme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
-
-                if !pins.isEmpty {
-                    Text("ANNOTATION PINS").sectionHeaderStyle()
-                    VStack(spacing: 6) {
-                        ForEach(pins) { pin in
-                            HStack(alignment: .top, spacing: 12) {
-                                if let d = pin.domain {
-                                    SeverityDot(domain: d, severity: pin.severity ?? .moderate, size: 10)
-                                        .padding(.top, 4)
-                                } else {
-                                    Circle().fill(Theme.ink).frame(width: 10, height: 10).padding(.top, 4)
-                                }
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(pin.label)
-                                        .font(Type.body)
-                                        .foregroundStyle(Theme.ink)
-                                    HStack(spacing: 6) {
-                                        if let d = pin.domain { DomainBadge(domain: d) }
-                                        Text(pin.createdAt, style: .relative)
-                                            .font(Type.caption)
-                                            .foregroundStyle(Theme.inkMuted)
-                                    }
-                                }
-                                Spacer()
-                            }
-                            .padding(12)
-                            .background(Theme.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
-                        }
-                    }
-                } else {
-                    Button {
-                        showingAnnotations = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle")
-                            Text("Add annotation pin")
-                        }
-                        .foregroundStyle(Theme.ink)
-                    }
-                    .buttonStyle(.ghost)
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 16)
+    private func trimmedPreview(_ s: String) -> String {
+        let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        if trimmed.count > 60 {
+            return String(trimmed.prefix(60)) + "…"
         }
+        return trimmed
     }
 
-    // MARK: - 3D viewer controls
+    // MARK: - Toolbar
 
-    private var viewerControls: some View {
-        HStack(spacing: 6) {
-            ForEach(FaceViewPreset.allCases) { preset in
-                Button {
-                    meshController.setPreset(preset)
-                } label: {
-                    Text(preset.label)
-                        .font(.caption.weight(.semibold))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if existingCase != nil {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { exportPDF() } label: {
+                    Image(systemName: "square.and.arrow.up")
                 }
-                .background(.ultraThinMaterial, in: Capsule())
                 .foregroundStyle(Theme.ink)
+                .accessibilityLabel("Export plan")
             }
-
-            Spacer(minLength: 4)
-
-            Button {
-                meshController.reset()
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            NavigationLink {
+                CalibrationScreen(face: face) {
+                    results = MetricRegistry.defaultRegistry()
+                        .evaluateAll(on: AnalyzableFace(face))
+                }
             } label: {
-                Image(systemName: "arrow.counterclockwise")
-                    .font(.caption.weight(.semibold))
-                    .padding(8)
+                Image(systemName: "scope")
+                    .accessibilityLabel("Calibrate landmarks")
             }
-            .background(.ultraThinMaterial, in: Circle())
             .foregroundStyle(Theme.ink)
-            .accessibilityLabel("Reset view")
+        }
+        if existingCase == nil {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Save") { showingSaveSheet = true }
+                    .foregroundStyle(Theme.ink)
+            }
         }
     }
 
@@ -469,6 +326,47 @@ struct AnalysisScreen: View {
         }
     }
 
+    // MARK: - Notes sheet
+
+    private var notesSheet: some View {
+        NavigationStack {
+            ZStack {
+                Theme.canvas.ignoresSafeArea()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("CLINICIAN NOTES").sectionHeaderStyle()
+                        ZStack(alignment: .topLeading) {
+                            if notes.isEmpty {
+                                Text("Notes for this visit (no PII).")
+                                    .font(Type.body)
+                                    .foregroundStyle(Theme.inkMuted)
+                                    .padding(12)
+                                    .allowsHitTesting(false)
+                            }
+                            TextEditor(text: $notes)
+                                .frame(minHeight: 200)
+                                .scrollContentBackground(.hidden)
+                                .padding(8)
+                                .font(Type.body)
+                                .foregroundStyle(Theme.ink)
+                        }
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+                    }
+                    .padding(16)
+                }
+            }
+            .navigationTitle("Notes")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showingNotes = false }
+                        .foregroundStyle(Theme.ink)
+                }
+            }
+        }
+    }
+
     // MARK: - PDF export
 
     @MainActor
@@ -478,17 +376,12 @@ struct AnalysisScreen: View {
         guard let data = TreatmentPlanPDF.generate(
             patient: p, visit: c, meshSnapshot: snapshot
         ) else { return }
-        let stamp = ISO8601DateFormatter().string(from: c.createdAt)
-            .prefix(10)
+        let stamp = ISO8601DateFormatter().string(from: c.createdAt).prefix(10)
         let name = "FaceMap_\(p.code)_\(c.label)_\(stamp)"
         pdfShareItem = PDFShareItem.write(data, suggestedName: name)
     }
 
-    /// Snapshot the live mesh viewport into a UIImage. Falls back to a coloured
-    /// placeholder if the controller hasn't attached an entity yet.
     private func renderMeshSnapshot() -> UIImage? {
-        // Render a SwiftUI view that hosts the mesh into an image. We intentionally
-        // re-instantiate so the viewport runs even when off-screen.
         let view = FaceMeshOverlay(
             face: face,
             regionSeverity: regionSeverity,

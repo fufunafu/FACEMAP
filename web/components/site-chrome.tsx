@@ -4,12 +4,12 @@ import { DisclaimerBanner } from "./disclaimer-banner";
 import { ThemeToggle } from "./theme-toggle";
 
 const NAV: Array<{ href: string; label: string }> = [
-  { href: "/framework", label: "Framework" },
+  { href: "/aart-hit", label: "AART-HIT" },
+  { href: "/fas", label: "FAS" },
+  { href: "/hits", label: "HITs" },
+  { href: "/range", label: "Range" },
   { href: "/decision-aid", label: "Decision aid" },
   { href: "/app", label: "App" },
-  { href: "/methodology", label: "Methodology" },
-  { href: "/practitioners", label: "Practitioners" },
-  { href: "/about", label: "About" },
 ];
 
 export function NavBar() {
@@ -59,7 +59,11 @@ export function Footer() {
           </div>
           <nav aria-label="Footer" className="grid grid-cols-2 gap-x-10 gap-y-2 text-sm sm:grid-cols-3">
             {[
-              { href: "/framework", label: "Framework" },
+              { href: "/aart-hit", label: "AART-HIT" },
+              { href: "/fas", label: "FAS" },
+              { href: "/hits", label: "HITs" },
+              { href: "/range", label: "Range" },
+              { href: "/anatomy", label: "Anatomy" },
               { href: "/decision-aid", label: "Decision aid" },
               { href: "/app", label: "App" },
               { href: "/methodology", label: "Methodology" },

@@ -1,18 +1,23 @@
 import type { Metric } from "@/content/metrics";
-import { domains } from "@/content/domains";
+import { facets } from "@/content/fas";
 
 export function MetricExplainer({ metric }: { metric: Metric }) {
-  const domain = domains[metric.domain];
+  const facet = facets[metric.facet];
   return (
     <article className="rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-6">
       <div className="flex items-center justify-between gap-4">
         <h3 className="text-xl">{metric.name}</h3>
         <span
-          className="size-2 rounded-full"
-          style={{ backgroundColor: domain.hue }}
-          aria-hidden="true"
-          title={domain.name}
-        />
+          className="inline-flex items-center gap-2 rounded-full border hairline px-2 py-0.5 text-[10px] uppercase tracking-wider text-[var(--color-ink-dim)]"
+          style={{ borderColor: `${facet.hue}55` }}
+        >
+          <span
+            className="size-1.5 rounded-full"
+            style={{ backgroundColor: facet.hue }}
+            aria-hidden="true"
+          />
+          {facet.name}
+        </span>
       </div>
       <p className="mt-2 text-sm text-[var(--color-ink-dim)]">
         {metric.summary}

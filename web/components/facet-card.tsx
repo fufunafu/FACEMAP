@@ -1,29 +1,31 @@
-import type { Domain } from "@/content/domains";
+import type { Facet } from "@/content/fas";
+import { hits as hitsById } from "@/content/hits";
 import { cn } from "@/lib/cn";
 
-export function DomainBadge({ domain }: { domain: Domain }) {
+export function FacetBadge({ facet }: { facet: Facet }) {
   return (
     <span
       className="inline-flex items-center gap-2 rounded-full border hairline px-3 py-1 text-[11px] uppercase tracking-wider text-[var(--color-ink-dim)]"
-      style={{ borderColor: `${domain.hue}55` }}
+      style={{ borderColor: `${facet.hue}66` }}
     >
       <span
         className="size-2 rounded-full"
-        style={{ backgroundColor: domain.hue }}
+        style={{ backgroundColor: facet.hue }}
         aria-hidden="true"
       />
-      {domain.name}
+      {facet.name}
     </span>
   );
 }
 
-export function DomainCard({
-  domain,
+export function FacetCard({
+  facet,
   className,
 }: {
-  domain: Domain;
+  facet: Facet;
   className?: string;
 }) {
+  const linkedHits = facet.hits.map((id) => hitsById[id as keyof typeof hitsById]);
   return (
     <article
       className={cn(
@@ -31,26 +33,26 @@ export function DomainCard({
         className,
       )}
       style={{
-        backgroundImage: `linear-gradient(180deg, ${domain.hue}10 0%, transparent 60%)`,
+        backgroundImage: `linear-gradient(180deg, ${facet.hue}14 0%, transparent 60%)`,
       }}
     >
-      <DomainBadge domain={domain} />
-      <h3 className="mt-4 text-2xl">{domain.name}</h3>
-      <p className="mt-2 text-[var(--color-ink-dim)]">{domain.blurb}</p>
+      <FacetBadge facet={facet} />
+      <h3 className="mt-4 text-2xl">{facet.name}</h3>
+      <p className="mt-2 text-[var(--color-ink-dim)]">{facet.blurb}</p>
 
       <div className="mt-5">
         <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
-          Sub-concerns
+          Graded parameters
         </p>
         <ul className="mt-2 space-y-1 text-sm text-[var(--color-ink-dim)]">
-          {domain.subConcerns.map((c) => (
-            <li key={c} className="flex items-start gap-2">
+          {facet.parameters.map((p) => (
+            <li key={p} className="flex items-start gap-2">
               <span
                 className="mt-1.5 size-1.5 rounded-full"
-                style={{ backgroundColor: domain.hue }}
+                style={{ backgroundColor: facet.hue }}
                 aria-hidden="true"
               />
-              {c}
+              {p}
             </li>
           ))}
         </ul>
@@ -58,20 +60,20 @@ export function DomainCard({
 
       <div className="mt-5">
         <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
-          Example regions
+          Addressed by
         </p>
         <p className="mt-2 text-sm text-[var(--color-ink-dim)]">
-          {domain.exampleRegions.join(" · ")}
+          {linkedHits.map((h) => h.name).join(" · ")}
         </p>
       </div>
 
-      {!domain.quantifiedInV1 ? (
+      {!facet.quantifiedInV1 ? (
         <p className="mt-5 rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-xs text-[var(--color-ink-muted)]">
-          Quantified metrics in this quadrant are on the v0.1 roadmap. The framework is published in full; the iOS app currently measures the Symmetry & proportions quadrant.
+          Graded by direct observation in v0.1 of the FaceMap iOS app. Quantified metrics for this facet are on the roadmap.
         </p>
       ) : (
         <p className="mt-5 rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-xs text-[var(--color-ink-dim)]">
-          Quantified in v0.1 of the iOS app via five geometric metrics.
+          Quantified in v0.1 by FaceMap&apos;s geometric metrics.
         </p>
       )}
     </article>
