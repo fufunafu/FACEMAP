@@ -70,6 +70,64 @@ export default function MethodologyPage() {
         </div>
       </section>
 
+      <section className="border-b hairline">
+        <div className="container-page py-16">
+          <h2 className="font-display text-3xl tracking-tight md:text-4xl">
+            Further reading.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            The site is built around the AART-HIT™ paper, with related foundations on facial anatomy and proportion.
+          </p>
+          <ol className="mt-8 space-y-4 text-sm text-[var(--color-ink-dim)]">
+            <li className="rounded-md border hairline bg-[var(--color-surface)] p-4">
+              <p>
+                <span className="text-[var(--color-ink)]">Nikolis A, Avelar LET, Haddad A, et al.</span>{" "}
+                Turn Your AART™ into a HIT™ Using a Complete Range of Aesthetic Injectables: Methodology for Combining Products to Maximise Patient Outcomes.
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                <em>Clinical, Cosmetic and Investigational Dermatology</em> 2024:17, 2051–2069. doi:10.2147/CCID.S465155
+              </p>
+            </li>
+            <li className="rounded-md border hairline bg-[var(--color-surface)] p-4">
+              <p>
+                <span className="text-[var(--color-ink)]">Mendelson B, Wong CH.</span>{" "}
+                Changes in the facial skeleton with aging: implications and clinical applications in facial rejuvenation.
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                <em>Aesthetic Plastic Surgery</em> 2012;36(4):753–760.
+              </p>
+            </li>
+            <li className="rounded-md border hairline bg-[var(--color-surface)] p-4">
+              <p>
+                <span className="text-[var(--color-ink)]">Rohrich RJ, Pessa JE.</span>{" "}
+                The fat compartments of the face: anatomy and clinical implications for cosmetic surgery.
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                <em>Plastic and Reconstructive Surgery</em> 2007;119(7):2219–2227.
+              </p>
+            </li>
+            <li className="rounded-md border hairline bg-[var(--color-surface)] p-4">
+              <p>
+                <span className="text-[var(--color-ink)]">Pessa JE, Rohrich RJ.</span>{" "}
+                Facial Topography: Clinical Anatomy of the Face. CRC Press, 2012.
+              </p>
+            </li>
+            <li className="rounded-md border hairline bg-[var(--color-surface)] p-4">
+              <p>
+                <span className="text-[var(--color-ink)]">Farkas LG, Hreczko TA, Kolar JC, Munro IR.</span>{" "}
+                Vertical and horizontal proportions of the face in young adult North American Caucasians: revision of neoclassical canons.
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-ink-muted)]">
+                <em>Plastic and Reconstructive Surgery</em> 1985;75(3):328–338.
+              </p>
+            </li>
+          </ol>
+          <p className="mt-6 text-[11px] text-[var(--color-ink-muted)]">
+            Citations are provided as a reading guide, not as endorsement. Practitioners should consult primary sources directly.
+          </p>
+        </div>
+      </section>
+
       <section>
         <div className="container-page py-16">
           <h2 className="font-display text-3xl tracking-tight md:text-4xl">

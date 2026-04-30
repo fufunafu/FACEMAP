@@ -15,7 +15,7 @@ struct CategoryRow: View {
     }
 
     private var worstSeverity: MetricResult.Severity {
-        flagged.map { $0.severity }.max(by: severityOrder) ?? .normal
+        flagged.map { $0.severity }.max { rank($0) < rank($1) } ?? .normal
     }
 
     /// Worst flagged metric: highest severity, ties broken by largest finite deviation.

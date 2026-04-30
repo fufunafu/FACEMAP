@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { facets, facetsList, facetOrder, type FacetId } from "@/content/fas";
 import { cn } from "@/lib/cn";
 
@@ -51,6 +51,31 @@ export function FasRadar({
 }: FasRadarProps) {
   const ids = useId();
   const [hover, setHover] = useState<FacetId | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    const node = svgRef.current;
+    if (!node) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setRevealed(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            setRevealed(true);
+            observer.disconnect();
+            break;
+          }
+        }
+      },
+      { threshold: 0.25 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   function cycle(direction: 1 | -1) {
     if (!interactive) return;
@@ -71,6 +96,7 @@ export function FasRadar({
 
   return (
     <svg
+      ref={svgRef}
       viewBox={`0 0 ${VIEW} ${VIEW}`}
       width={size}
       height={size}
@@ -123,32 +149,40 @@ export function FasRadar({
       })}
 
       {/* Filled severity polygon */}
-      <polygon
-        points={polygon}
-        fill="rgba(201,187,238,0.2)"
-        stroke="var(--color-ink)"
-        strokeWidth={1.25}
-        style={{ transition: "all 240ms ease" }}
-      />
-
-      {/* Severity markers per axis */}
-      {facetsList.map((f, i) => {
-        const v = Math.max(0, Math.min(3, values[f.id] ?? 0));
-        if (v === 0) return null;
-        const r = (v / 3) * R_MAX;
-        const [x, y] = point(i, r);
-        return (
-          <circle
-            key={`mark-${f.id}`}
-            cx={x}
-            cy={y}
-            r={6}
-            fill={f.hue}
-            stroke="var(--color-canvas)"
-            strokeWidth={2}
-          />
-        );
-      })}
+      <g
+        style={{
+          transformOrigin: `${C}px ${C}px`,
+          transform: revealed ? "scale(1)" : "scale(0.001)",
+          opacity: revealed ? 1 : 0,
+          transition:
+            "transform 720ms cubic-bezier(0.22, 1, 0.36, 1) 80ms, opacity 320ms ease 80ms",
+        }}
+      >
+        <polygon
+          points={polygon}
+          fill="rgba(201,187,238,0.2)"
+          stroke="var(--color-ink)"
+          strokeWidth={1.25}
+          style={{ transition: "all 240ms ease" }}
+        />
+        {facetsList.map((f, i) => {
+          const v = Math.max(0, Math.min(3, values[f.id] ?? 0));
+          if (v === 0) return null;
+          const r = (v / 3) * R_MAX;
+          const [x, y] = point(i, r);
+          return (
+            <circle
+              key={`mark-${f.id}`}
+              cx={x}
+              cy={y}
+              r={6}
+              fill={f.hue}
+              stroke="var(--color-canvas)"
+              strokeWidth={2}
+            />
+          );
+        })}
+      </g>
 
       {/* Labels (interactive when in tablist mode) */}
       {facetsList.map((f, i) => {

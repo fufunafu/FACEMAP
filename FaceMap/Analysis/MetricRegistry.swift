@@ -22,6 +22,7 @@ struct MetricRegistry {
             GoldenRatioMetric(),
             CanthalTiltMetric(),
             AsymmetryMetric(),
+            SurfaceDisplacementMetric(),
         ])
     }
 }

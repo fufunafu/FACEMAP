@@ -55,18 +55,19 @@ ARKit's face mesh has stable topology (~1,220 vertices, fixed indices across all
 
 These shortcuts are acceptable while we have no real users and no clinical data on device. **Each must be addressed before the first build that ships to a practitioner.**
 
-### 1. Replace the SwiftData dev-mode store reset with a versioned migration
+### 1. SwiftData migrations — when adding mandatory attributes
 
-`FaceMapApp.swift` → `init()` currently catches any `ModelContainer` load failure and **deletes the on-device store** (`resetOnDiskStore()`). This is convenient during development because adding a non-optional attribute (e.g. `PatientCase.notes: String`) makes lightweight migration fail, and the reset gets the app launching again — but it would silently destroy patient cases in production.
+`FaceMap/Cases/SchemaMigrationPlan.swift` declares `SchemaV1`, `FaceMapSchema.current`, and `FaceMapMigrationPlan`. There's currently exactly one schema version. Lightweight migration handles new optional attributes automatically. Migration **only fails** for new mandatory attributes that have no value on existing rows — that's the landmine.
 
-**Action before production:**
-- Remove the `catch → resetOnDiskStore()` block; let load failures crash so we notice them in TestFlight before any practitioner sees them.
-- Adopt a `VersionedSchema` + `SchemaMigrationPlan` ([Apple docs](https://developer.apple.com/documentation/swiftdata/schemamigrationplan)). One `VersionedSchema` per shipped schema; one migration stage between consecutive versions; each stage supplies defaults (or computed values) for new mandatory attributes.
-- Schema-fields currently relying on the reset (audit before each release):
-  - `PatientCase.notes: String` — added v0.2; migrate existing rows with `""`.
-  - `PatientCase.patient: Patient?` — already optional; the `bootstrap()` migration in `CaseStore` rebinds orphans to an "Unassigned" `Patient`. Keep that logic when you switch to a versioned plan.
-  - `PatientCase.annotationsJSON: Data?` — already optional; no migration default needed.
-  - Any future non-optional field added to `PatientCase` or `Patient` **must** ship with a migration default.
+**Before adding a non-optional `@Attribute` or relationship to `PatientCase` or `Patient`:**
+- Add a `SchemaV2: VersionedSchema` (the file's bottom-of-page comment shows the worked pattern).
+- Add a `MigrationStage.custom(fromVersion: SchemaV1.self, toVersion: SchemaV2.self, willMigrate: { context in ... })` that supplies a default value for the new attribute on every existing row before the schema flip.
+- Append the stage to `FaceMapMigrationPlan.stages`.
+- Bump `FaceMapSchema.current` to V2.
+
+**Default rule:** new fields ship as optional unless there's a strong reason. Optional fields don't need migration stages. The only fields that *must* be non-optional are ones the rest of the code can't safely default (e.g. an enum case with no sensible "unknown" value).
+
+**Why no dev-mode store reset any more:** earlier versions caught migration failures and wiped the on-device store. That convenience would silently destroy patient cases in production. `FaceMapApp.init()` now lets migration failures crash so they're caught in TestFlight before they reach a practitioner.
 
 ### 2. Calibrate landmark indices before clinical use
 

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { aart } from "@/content/aart-hit";
+import { AgingTimeline } from "@/components/aging-timeline";
 
 export const metadata: Metadata = {
   title: "AART-HIT™ methodology",
@@ -77,6 +78,23 @@ export default function AartHitPage() {
               </li>
             ))}
           </ol>
+        </div>
+      </section>
+
+      <section className="border-b hairline">
+        <div className="container-page py-20">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+            Patient timeline
+          </p>
+          <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
+            Treatment shifts with age.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            Beautification → volumization → eversion → contour. The HITs that come into play depend on the patient&apos;s decade and their FAS profile.
+          </p>
+          <div className="mt-10">
+            <AgingTimeline />
+          </div>
         </div>
       </section>
 

@@ -408,6 +408,9 @@ struct AnalysisScreen: View {
         case AsymmetryMetric.id:
             return String(format: "worst pair Δ %.1f mm (target ≤ %.1f mm)",
                           r.value * 1000, r.target.upperBound * 1000)
+        case SurfaceDisplacementMetric.id:
+            return String(format: "worst Z-deficit %.1f mm (target ≤ %.1f mm)",
+                          r.value * 1000, r.target.upperBound * 1000)
         default:
             return String(format: "%.3f", r.value)
         }

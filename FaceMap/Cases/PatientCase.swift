@@ -21,7 +21,9 @@ final class PatientCase {
     /// Annotation pins dropped on the mesh in Annotate mode. Encoded JSON of `[AnnotationPin]`.
     var annotationsJSON: Data?
     /// Free-text clinician notes scoped to the visit.
-    var notes: String
+    /// Optional so SwiftData lightweight migration from pre-`notes` stores succeeds.
+    /// Treat `nil` and `""` interchangeably at call sites.
+    var notes: String?
 
     init(id: UUID = UUID(),
          label: String,
@@ -29,7 +31,7 @@ final class PatientCase {
          capturedFace: CapturedFace,
          metricResults: [MetricResult],
          patient: Patient? = nil,
-         notes: String = "",
+         notes: String? = nil,
          annotations: [AnnotationPin] = []) {
         self.id = id
         self.label = label

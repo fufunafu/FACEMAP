@@ -9,6 +9,7 @@ struct FaceCaptureView: UIViewRepresentable {
         weak var arView: ARView?
         let onSnapshot: (CapturedFace) -> Void
         let onTrackingState: (TrackingState) -> Void
+        let onHeadPose: (HeadPose) -> Void
 
         /// Buffer of recent geometries used for frame averaging on capture.
         private var recentGeometries: [(vertices: [SIMD3<Float>], transform: simd_float4x4, blendShapes: [String: Float])] = []
@@ -18,9 +19,11 @@ struct FaceCaptureView: UIViewRepresentable {
         var pendingSnapshot = false
 
         init(onSnapshot: @escaping (CapturedFace) -> Void,
-             onTrackingState: @escaping (TrackingState) -> Void) {
+             onTrackingState: @escaping (TrackingState) -> Void,
+             onHeadPose: @escaping (HeadPose) -> Void) {
             self.onSnapshot = onSnapshot
             self.onTrackingState = onTrackingState
+            self.onHeadPose = onHeadPose
         }
 
         enum TrackingState: Equatable {
@@ -35,6 +38,7 @@ struct FaceCaptureView: UIViewRepresentable {
                 return
             }
             onTrackingState(.tracking)
+            onHeadPose(HeadPose.from(transform: face.transform))
             let geom = face.geometry
             if triangleIndices.isEmpty {
                 triangleIndices = geom.triangleIndices.map { Int16($0) }
@@ -77,10 +81,15 @@ struct FaceCaptureView: UIViewRepresentable {
 
     let onSnapshot: (CapturedFace) -> Void
     let onTrackingState: (Coordinator.TrackingState) -> Void
+    var onHeadPose: (HeadPose) -> Void = { _ in }
     @Binding var captureRequested: Bool
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onSnapshot: onSnapshot, onTrackingState: onTrackingState)
+        Coordinator(
+            onSnapshot: onSnapshot,
+            onTrackingState: onTrackingState,
+            onHeadPose: onHeadPose
+        )
     }
 
     func makeUIView(context: Context) -> ARView {

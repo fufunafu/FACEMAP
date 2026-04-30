@@ -72,6 +72,29 @@ function Hero() {
           />
         </div>
       </div>
+
+      <div className="border-t hairline">
+        <div className="container-page grid grid-cols-2 gap-px bg-[var(--color-hairline)] md:grid-cols-4">
+          {[
+            { stat: "100%", label: "agreed FAS™ was useful in clinical practice" },
+            { stat: "100%", label: "agreed temporal sequencing was adequate" },
+            { stat: "85%", label: "agreed AART-HIT™ was adequate for their needs" },
+            { stat: "n=28", label: "clinicians surveyed across IMCAS Paris 2023" },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="bg-[var(--color-canvas)] px-6 py-6"
+            >
+              <p className="num font-display text-3xl tracking-tight text-[var(--color-ink)]">
+                {s.stat}
+              </p>
+              <p className="mt-1 text-xs text-[var(--color-ink-dim)]">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

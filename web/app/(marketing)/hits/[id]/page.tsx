@@ -83,6 +83,33 @@ export default async function HitDetailPage({
                   </li>
                 ))}
               </ul>
+
+              <h3 className="mt-10 text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
+                Suggested products from the Galderma portfolio
+              </h3>
+              <ul className="mt-3 space-y-2">
+                {hit.products.map((p) => (
+                  <li
+                    key={`${p.name}-${p.use}`}
+                    className="rounded-md border hairline bg-[var(--color-surface)] p-3"
+                  >
+                    <div className="flex flex-wrap items-baseline gap-2">
+                      <span className="text-sm font-medium">{p.name}</span>
+                      {p.brand ? (
+                        <span className="text-xs text-[var(--color-ink-muted)]">
+                          · {p.brand}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--color-ink-dim)]">
+                      {p.use}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-[11px] text-[var(--color-ink-muted)]">
+                Adapted from Nikolis et al., Clin Cosmet Investig Dermatol 2024:17. Practitioner judgement is the final authority.
+              </p>
             </article>
 
             <aside className="space-y-6">
@@ -143,6 +170,23 @@ export default async function HitDetailPage({
           </div>
         </div>
       </section>
+
+      {hit.id === "kiss-and-smile" ? (
+        <section className="border-b hairline">
+          <div className="container-page py-12">
+            <p className="text-sm text-[var(--color-ink-dim)]">
+              The Kiss &amp; Smile HIT uses a site-specific FAS variant for lips —{" "}
+              <Link
+                href="/lip-assessment"
+                className="text-[var(--color-ink)] underline-offset-4 hover:underline"
+              >
+                the Lip Assessment Scale (LAS)
+              </Link>
+              .
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       <section>
         <div className="container-page py-12">

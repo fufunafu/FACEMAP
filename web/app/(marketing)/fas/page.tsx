@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { FasRadar } from "@/components/fas-radar";
 import { FacetCard } from "@/components/facet-card";
+import { FasComparison } from "@/components/fas-comparison";
 import { SeverityRamp } from "@/components/severity-ramp";
 import { facetsList } from "@/content/fas";
 
@@ -88,6 +89,41 @@ export default function FasPage() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b hairline">
+        <div className="container-page py-20">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+                Visit over visit
+              </p>
+              <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
+                The radar shrinks toward zero.
+              </h2>
+              <p className="mt-4 text-[var(--color-ink-dim)]">
+                With each subsequent treatment, the lines of the FAS move closer to point 0 — the centre — indicating milder deficits. Plotting baseline and follow-up on the same radar makes progress legible at a glance.
+              </p>
+              <div className="mt-6 flex items-center gap-5 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="block h-px w-6 border-t border-dashed border-[var(--color-ink-dim)]" />
+                  <span className="text-[var(--color-ink-dim)]">Baseline</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="block h-[2px] w-6 bg-[var(--color-ink)]" />
+                  <span className="text-[var(--color-ink-dim)]">Follow-up</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <FasComparison
+                baseline={{ skinQuality: 2, facialShape: 3, proportions: 2, symmetry: 2, expression: 3 }}
+                followUp={{ skinQuality: 1, facialShape: 1, proportions: 1, symmetry: 1, expression: 2 }}
+                size={420}
+              />
             </div>
           </div>
         </div>

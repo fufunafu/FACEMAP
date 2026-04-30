@@ -11,7 +11,8 @@ final class MetricRegistryTests: XCTestCase {
         XCTAssertTrue(ids.contains(GoldenRatioMetric.id))
         XCTAssertTrue(ids.contains(CanthalTiltMetric.id))
         XCTAssertTrue(ids.contains(AsymmetryMetric.id))
-        XCTAssertEqual(ids.count, 5)
+        XCTAssertTrue(ids.contains(SurfaceDisplacementMetric.id))
+        XCTAssertEqual(ids.count, 6)
     }
 
     func test_evaluateAll_returnsOneResultPerMetric() {
@@ -37,7 +38,7 @@ final class MetricRegistryTests: XCTestCase {
             .alarBaseL:     SIMD3( 0.018, -0.08, 0),
         ])
         let results = MetricRegistry.defaultRegistry().evaluateAll(on: face)
-        XCTAssertEqual(results.count, 5)
+        XCTAssertEqual(results.count, 6)
     }
 
     func test_flaggedRegionsAggregation() {

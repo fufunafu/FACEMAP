@@ -156,9 +156,9 @@ struct PDFPageView: View {
                 }
             }
 
-            if !visit.notes.isEmpty {
+            if let notes = visit.notes, !notes.isEmpty {
                 sectionHeader("NOTES")
-                Text(visit.notes)
+                Text(notes)
                     .font(.system(size: 10))
                     .foregroundStyle(PDFTheme.pageInk)
                     .frame(maxWidth: .infinity, alignment: .leading)

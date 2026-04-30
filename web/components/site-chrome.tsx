@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BrandMark } from "./brand-mark";
 import { DisclaimerBanner } from "./disclaimer-banner";
 import { ThemeToggle } from "./theme-toggle";
+import { MobileNav } from "./mobile-nav";
 
 const NAV: Array<{ href: string; label: string }> = [
   { href: "/aart-hit", label: "AART-HIT" },
@@ -35,10 +36,11 @@ export function NavBar() {
           <ThemeToggle />
           <Link
             href="/access"
-            className="rounded-[var(--radius-button)] bg-[var(--color-cta-bg)] px-4 py-2 text-sm font-medium text-[var(--color-cta-ink)] transition hover:opacity-90"
+            className="hidden rounded-[var(--radius-button)] bg-[var(--color-cta-bg)] px-4 py-2 text-sm font-medium text-[var(--color-cta-ink)] transition hover:opacity-90 md:inline-flex"
           >
             Get access
           </Link>
+          <MobileNav items={NAV} />
         </div>
       </div>
     </header>
@@ -95,8 +97,13 @@ export function Footer() {
 export function PageShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
+      <a href="#main" className="skip-link">
+        Skip to main content
+      </a>
       <NavBar />
-      <main className="flex-1">{children}</main>
+      <main id="main" className="flex-1">
+        {children}
+      </main>
       <Footer />
     </div>
   );

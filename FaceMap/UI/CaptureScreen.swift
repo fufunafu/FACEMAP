@@ -8,6 +8,9 @@ struct CaptureScreen: View {
     @State private var capturedFace: CapturedFace?
     @State private var navigateToAnalysis = false
     @State private var isCapturing = false
+    @State private var headPose: HeadPose?
+    /// Tolerance in degrees: any axis above this triggers the "head not level" warning.
+    private let poseTolerance: Double = 5
 
     var body: some View {
         ZStack {
@@ -20,7 +23,11 @@ struct CaptureScreen: View {
                         isCapturing = false
                         navigateToAnalysis = true
                     },
-                    onTrackingState: { state in trackingState = state },
+                    onTrackingState: { state in
+                        trackingState = state
+                        if state != .tracking { headPose = nil }
+                    },
+                    onHeadPose: { pose in headPose = pose },
                     captureRequested: $captureRequested
                 )
                 .ignoresSafeArea()
@@ -105,10 +112,19 @@ struct CaptureScreen: View {
 
     private var borderColor: Color {
         switch trackingState {
-        case .tracking:    return Theme.ink.opacity(0.9)
+        case .tracking:
+            if let p = headPose, !p.isLevel(within: poseTolerance) {
+                return Theme.domainSymmetry            // off-level → magenta-pink warning
+            }
+            return Theme.ink.opacity(0.9)
         case .noFace:      return Theme.ink.opacity(0.45)
         case .unsupported: return .clear
         }
+    }
+
+    private var poseIsOff: Bool {
+        guard trackingState == .tracking, let p = headPose else { return false }
+        return !p.isLevel(within: poseTolerance)
     }
 
     // MARK: - Instructions (above capture button)
@@ -134,10 +150,16 @@ struct CaptureScreen: View {
     }
 
     private var headline: String {
-        trackingState == .tracking ? "Hold still — tap to capture" : "Center your face in the frame"
+        if poseIsOff { return "Keep your head level" }
+        return trackingState == .tracking
+            ? "Hold still — tap to capture"
+            : "Center your face in the frame"
     }
 
     private var subhead: String {
+        if poseIsOff, let pose = headPose, let detail = pose.worstAxisDescription {
+            return "\(detail). A tilted pose makes apparent asymmetry. Re-centre and try again."
+        }
         switch trackingState {
         case .tracking:
             return "Keep your head level and your expression neutral. Capture takes less than a second."

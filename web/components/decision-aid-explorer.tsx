@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
 import { FasRadar } from "./fas-radar";
 import { SeverityRamp } from "./severity-ramp";
 import {
@@ -9,7 +10,7 @@ import {
   facetsList,
   type FacetId,
 } from "@/content/fas";
-import { hits as hitsById } from "@/content/hits";
+import { hits as hitsById, hitsList, type HitId } from "@/content/hits";
 import { metrics } from "@/content/metrics";
 
 const PRESET: Record<FacetId, number> = {
@@ -23,6 +24,9 @@ const PRESET: Record<FacetId, number> = {
 export function DecisionAidExplorer() {
   const [selected, setSelected] = useState<FacetId | null>("proportions");
   const [values, setValues] = useState<Record<FacetId, number>>(PRESET);
+
+  const ranking = useMemo(() => rankHits(values), [values]);
+  const totalGrade = facetOrder.reduce((s, f) => s + (values[f] ?? 0), 0);
 
   return (
     <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] lg:items-start">
@@ -39,6 +43,7 @@ export function DecisionAidExplorer() {
           values={values}
           setValues={setValues}
         />
+        <Recommendation ranking={ranking} totalGrade={totalGrade} />
       </div>
 
       <aside
@@ -69,6 +74,92 @@ export function DecisionAidExplorer() {
           ))}
         </div>
       </aside>
+    </div>
+  );
+}
+
+interface HitRanking {
+  id: HitId;
+  score: number;
+  contributing: Array<{ id: FacetId; grade: number }>;
+}
+
+function rankHits(values: Record<FacetId, number>): HitRanking[] {
+  const all = hitsList.map((h) => {
+    const contributing = h.facets
+      .map((f) => ({ id: f, grade: values[f] ?? 0 }))
+      .filter((c) => c.grade > 0)
+      .sort((a, b) => b.grade - a.grade);
+    const score = contributing.reduce((s, c) => s + c.grade, 0);
+    return { id: h.id, score, contributing };
+  });
+  return all.sort((a, b) => b.score - a.score);
+}
+
+function Recommendation({
+  ranking,
+  totalGrade,
+}: {
+  ranking: HitRanking[];
+  totalGrade: number;
+}) {
+  const top = ranking.filter((r) => r.score > 0);
+  return (
+    <div className="w-full max-w-[520px] rounded-[var(--radius-card)] border hairline bg-[var(--color-surface)] p-5">
+      <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
+        Suggested HITs (ranked)
+      </p>
+      {totalGrade === 0 ? (
+        <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
+          Grade at least one facet above 0 to see a ranked recommendation.
+        </p>
+      ) : top.length === 0 ? (
+        <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
+          No high-grade facets currently match a HIT. Adjust the grades to explore.
+        </p>
+      ) : (
+        <ol className="mt-3 space-y-2">
+          {top.slice(0, 3).map((r, i) => {
+            const hit = hitsById[r.id];
+            return (
+              <li
+                key={r.id}
+                className="rounded-md border hairline bg-[var(--color-surface-raised)] p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="num text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]"
+                      aria-label={`Rank ${i + 1}`}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <Link
+                      href={`/hits/${hit.id}`}
+                      className="font-medium underline-offset-4 hover:underline"
+                      style={{ color: hit.hue }}
+                    >
+                      {hit.name}
+                    </Link>
+                  </div>
+                  <span className="num text-xs text-[var(--color-ink-muted)]">
+                    score {r.score}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[var(--color-ink-dim)]">
+                  Contributing:{" "}
+                  {r.contributing
+                    .map((c) => `${facets[c.id].name} (${c.grade})`)
+                    .join(", ")}
+                </p>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <p className="mt-3 text-[11px] text-[var(--color-ink-muted)]">
+        Educational ranking only. Score = sum of grades on the facets each HIT addresses.
+      </p>
     </div>
   );
 }

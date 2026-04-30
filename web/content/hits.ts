@@ -13,6 +13,15 @@ export type HitId =
   | "shape-up"
   | "profile";
 
+export interface ProductSuggestion {
+  /** Generic name as listed in the paper's acronym table. */
+  name: string;
+  /** Brand label (e.g. "Restylane Lyft"). */
+  brand?: string;
+  /** Where in this HIT the product is suggested. */
+  use: string;
+}
+
 export interface Hit {
   id: HitId;
   /** Display name (e.g. "Bright Eyes HIT™"). */
@@ -29,6 +38,8 @@ export interface Hit {
   areas: string[];
   /** Which of the 4 R's apply (relax / refine / refresh / renew). */
   rs: Array<"relax" | "refine" | "refresh" | "renew">;
+  /** Suggested products from the Galderma portfolio per the paper. */
+  products: ProductSuggestion[];
   /** Hex hue used to brand the HIT. */
   hue: string;
 }
@@ -51,6 +62,12 @@ export const hits: Record<HitId, Hit> = {
       "Superior-anterior midface",
     ],
     rs: ["relax", "refine"],
+    products: [
+      { name: "Neurotoxin A", brand: "Dysport", use: "Glabellar lines and lateral canthal lines" },
+      { name: "HA-DEF", brand: "Restylane Defyne", use: "Periorbital and temporal fossa (thin skin)" },
+      { name: "HA-LYF", brand: "Restylane Lyft", use: "Temporal fossa volumisation (thick skin)" },
+      { name: "HA-VOL", brand: "Restylane Volyme", use: "Superior-anterior midface volumisation" },
+    ],
     hue: "#F2C9A1",
   },
   "kiss-and-smile": {
@@ -71,6 +88,15 @@ export const hits: Record<HitId, Hit> = {
       "Oral commissures",
     ],
     rs: ["refine", "relax"],
+    products: [
+      { name: "HA-KYS", brand: "Restylane Kysse", use: "Lip body — projection and definition (OBT)" },
+      { name: "HA-RES", brand: "Restylane", use: "Lip body alternative (NASHA, more projection)" },
+      { name: "HA-LYF", brand: "Restylane Lyft", use: "Pyriform aperture, deep nasolabial folds" },
+      { name: "HA-REF", brand: "Restylane Refyne", use: "Marionette lines, perioral" },
+      { name: "HA-DEF", brand: "Restylane Defyne", use: "Labiomental fold, oral commissures" },
+      { name: "HA-SBV", brand: "Skinboosters Vital/Lido", use: "Perioral hydration" },
+      { name: "Neurotoxin A", brand: "Dysport", use: "Lateral canthal lines (gummy smile, off-label)" },
+    ],
     hue: "#E9B5E0",
   },
   "glow-on": {
@@ -90,6 +116,11 @@ export const hits: Record<HitId, Hit> = {
       "Neck",
     ],
     rs: ["refresh", "renew", "relax"],
+    products: [
+      { name: "Neurotoxin A", brand: "Dysport", use: "Prevent further lines; smooth skin appearance" },
+      { name: "PLLA-SCA", brand: "Sculptra", use: "Collagen biostimulation; firmness and elasticity" },
+      { name: "HA-SBs", brand: "Skinboosters (Vital Lido, Vital Light Lido)", use: "Hydration, structure, elasticity" },
+    ],
     hue: "#C9BBEE",
   },
   "shape-up": {
@@ -110,6 +141,12 @@ export const hits: Record<HitId, Hit> = {
       "Jawline",
     ],
     rs: ["refine", "renew"],
+    products: [
+      { name: "HA-VOL", brand: "Restylane Volyme", use: "Medial midface / malar (deep layer)" },
+      { name: "HA-LYF", brand: "Restylane Lyft", use: "Zygoma (thick skin); pyriform aperture" },
+      { name: "HA-DEF", brand: "Restylane Defyne", use: "Zygoma (thin skin); superficial layers" },
+      { name: "PLLA-SCA", brand: "Sculptra", use: "Skin laxity / firming over months" },
+    ],
     hue: "#A6B4DD",
   },
   profile: {
@@ -129,6 +166,12 @@ export const hits: Record<HitId, Hit> = {
       "Jawline",
     ],
     rs: ["refine"],
+    products: [
+      { name: "HA-LYF", brand: "Restylane Lyft", use: "Pyriform aperture, chin projection" },
+      { name: "HA-DEF", brand: "Restylane Defyne", use: "Nasal bridge, jawline definition" },
+      { name: "HA-REF", brand: "Restylane Refyne", use: "Subtle profile refinement" },
+      { name: "Neurotoxin A", brand: "Dysport", use: "Nefertiti lift (off-label, neck)" },
+    ],
     hue: "#7A8094",
   },
 };

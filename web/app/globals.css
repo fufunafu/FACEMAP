@@ -82,6 +82,28 @@
     color: var(--color-ink);
   }
 
+  :focus-visible {
+    outline: 2px solid var(--color-facet-symmetry);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 1rem;
+    z-index: 100;
+    padding: 0.5rem 1rem;
+    background: var(--color-cta-bg);
+    color: var(--color-cta-ink);
+    border-radius: var(--radius-button);
+    font-size: 0.875rem;
+    transition: top 160ms ease;
+  }
+  .skip-link:focus {
+    top: 0.5rem;
+  }
+
   h1,
   h2,
   h3,
