@@ -2,8 +2,21 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { MetricExplainer } from "@/components/metric-explainer";
 import { SeverityRamp } from "@/components/severity-ramp";
+import { MeshViewer } from "@/components/mesh-viewer";
+import { PhoneFrame } from "@/components/phone-frame";
 import { metrics } from "@/content/metrics";
 import { facets } from "@/content/fas";
+
+// Toggle to true (and drop a GLB at web/public/sample-face.glb) to activate.
+const HAS_SAMPLE_MESH = false;
+
+// Toggle individual screenshot src to a real path under /public/screenshots
+// once captures are available; until then the PhoneFrame placeholder renders.
+const SCREENSHOTS = [
+  { src: "", caption: "Capture — TrueDepth framing guide and on-device mesh build." },
+  { src: "", caption: "Analyse — FAS radar with five facets graded after each capture." },
+  { src: "", caption: "Plan — flagged regions on the 3D mesh, opacity scaled to severity." },
+];
 
 export const metadata: Metadata = {
   title: "The app",
@@ -79,6 +92,55 @@ export default function AppPage() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      <section className="border-b hairline">
+        <div className="container-page py-20">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+            On iPhone
+          </p>
+          <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
+            Three screens, one workflow.
+          </h2>
+          <p className="mt-3 max-w-2xl text-[var(--color-ink-dim)]">
+            Capture, analyse, plan — every step on-device. Real screenshots arriving soon.
+          </p>
+          <div className="mt-12 flex flex-wrap items-start justify-center gap-8 lg:gap-12">
+            {SCREENSHOTS.map((s, i) => (
+              <PhoneFrame
+                key={i}
+                src={s.src || undefined}
+                placeholder={!s.src}
+                caption={s.caption}
+                width={260}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b hairline">
+        <div className="container-page py-20">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+                Sample 3D mesh
+              </p>
+              <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
+                Spin a captured face.
+              </h2>
+              <p className="mt-4 text-[var(--color-ink-dim)]">
+                The iOS app builds a high-fidelity 3D mesh from the iPhone&apos;s TrueDepth camera. The same mesh format renders inline here — drag to rotate, scroll to zoom.
+              </p>
+              <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
+                {HAS_SAMPLE_MESH
+                  ? "Live: drag to rotate, pinch to zoom."
+                  : "Sample face landing soon. Until then, a stylised preview."}
+              </p>
+            </div>
+            <MeshViewer hasMesh={HAS_SAMPLE_MESH} />
+          </div>
         </div>
       </section>
 

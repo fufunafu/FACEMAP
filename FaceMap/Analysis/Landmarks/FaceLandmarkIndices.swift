@@ -57,11 +57,17 @@ enum FaceLandmarkIndices {
         .alarBaseL:      278,   // left alar base
     ]
 
-    /// Coarse vertex-group mapping used by the heatmap. Each `FacialRegion` lists vertex
-    /// indices that belong to that region. PLACEHOLDER — populated as a small ring around
-    /// each region's central landmark; refine during calibration.
-    /// Empty groups are tolerated by the heatmap renderer.
-    static let regionVertices: [FacialRegion: [Int]] = [
+    /// Calibrated region overrides (from `RegionCalibrationStore`) merged over the
+    /// placeholder defaults. Use this in metrics and visualisations — it transparently
+    /// picks up whatever the practitioner has painted in `RegionCalibrationScreen`.
+    static var regionVertices: [FacialRegion: [Int]] {
+        RegionCalibrationStore.shared.effective()
+    }
+
+    /// Placeholder vertex-group mapping used until the practitioner paints regions
+    /// against their own captured mesh. PLACEHOLDER — small ring around each region's
+    /// central landmark. Empty groups are tolerated by the heatmap renderer.
+    static let defaultRegionVertices: [FacialRegion: [Int]] = [
         .forehead:    [16, 28, 21, 54, 103, 67, 109],
         .templeL:     [251, 284],
         .templeR:     [21, 54],

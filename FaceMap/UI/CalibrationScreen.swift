@@ -43,6 +43,14 @@ struct CalibrationScreen: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    RegionCalibrationScreen(face: face, onCommitted: onCommitted)
+                } label: {
+                    Image(systemName: "paintbrush")
+                        .accessibilityLabel("Paint regions")
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") { saveAndDismiss() }
                     .disabled(picked.isEmpty)
             }
