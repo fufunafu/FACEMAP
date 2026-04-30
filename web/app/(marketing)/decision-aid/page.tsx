@@ -4,7 +4,7 @@ import { DecisionAidExplorer } from "@/components/decision-aid-explorer";
 export const metadata: Metadata = {
   title: "Decision tool aid",
   description:
-    "Walk the four-domain Nikolis framework. Click each quadrant of the wheel to see its sub-concerns, the regions FaceMap can flag, and how severity is encoded.",
+    "Grade each FAS facet 0–3 and see which Holistic Individualised Treatment (HIT™) addresses the priorities. An interactive walkthrough of the AART-HIT™ methodology.",
 };
 
 export default function DecisionAidPage() {
@@ -16,16 +16,13 @@ export default function DecisionAidPage() {
             Decision tool aid
           </p>
           <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
-            Walk the wheel.
+            Grade the radar. Land the HIT.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
-            Click any quadrant — or use arrow keys — to see what it covers,
-            which anatomical regions FaceMap can flag inside it, and the
-            severity ramp the iOS app uses to render them.
+            Click any facet on the FAS radar — or tab between them with arrow keys — to see its parameters, the HIT(s) that address it, and the severity ramp. Adjust the grade to watch the radar shift.
           </p>
           <p className="mt-3 max-w-2xl text-sm text-[var(--color-ink-muted)]">
-            This is an educational tool. It does not look at any patient and
-            does not produce clinical recommendations.
+            This is an educational tool. It does not look at any patient and does not produce clinical recommendations.
           </p>
         </div>
       </section>

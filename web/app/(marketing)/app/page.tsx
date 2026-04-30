@@ -3,11 +3,12 @@ import type { Metadata } from "next";
 import { MetricExplainer } from "@/components/metric-explainer";
 import { SeverityRamp } from "@/components/severity-ramp";
 import { metrics } from "@/content/metrics";
+import { facets } from "@/content/fas";
 
 export const metadata: Metadata = {
   title: "The app",
   description:
-    "What FaceMap does on iPhone — capture a 3D mesh, run five geometric metrics, render flagged regions on an interactive 3D model.",
+    "What FaceMap does on iPhone — capture a 3D mesh, run geometric metrics that quantify the Proportions and Symmetry facets of the FAS, and render the radar on-device.",
 };
 
 const FEATURES = [
@@ -17,29 +18,29 @@ const FEATURES = [
       "Front-facing TrueDepth camera produces a high-fidelity 3D mesh on-device. No cloud upload. The capture screen guides framing and pose.",
   },
   {
-    title: "Interactive 3D viewer",
+    title: "FAS radar on iPhone",
     body:
-      "Drag to rotate, pinch to zoom. Preset views: front, three-quarter (L/R), profile (L/R), overhead. Flagged regions tint the mesh in their domain hue.",
+      "Every capture grades the radar. Proportions and Symmetry are quantified geometrically; Skin quality, Facial shape, and Expression are graded by the practitioner inline.",
   },
   {
     title: "Severity by opacity",
     body:
-      "No red·amber·green. Each region is shaded in its domain hue at an opacity that scales with severity (0 → 38 → 64 → 100%).",
+      "0 None · 1 Mild · 2 Moderate · 3 Severe. Severity is the opacity of the facet hue — outliers are obvious. No separate red·amber·green ramp.",
   },
   {
     title: "Local case storage",
     body:
-      "Save cases under non-PII patient codes (e.g. ‘P-014 Visit 2’). Cases stay on device unless the practitioner exports them.",
+      "Save cases under non-PII patient codes (e.g. ‘P-014 Visit 2’). Track each FAS visit-over-visit to see the radar shrink toward the centre.",
+  },
+  {
+    title: "HIT-ready output",
+    body:
+      "Every FAS profile maps to one or more HITs. The app surfaces which Holistic Individualised Treatment(s) the patient&apos;s outliers point to.",
   },
   {
     title: "Practitioner-only gate",
     body:
       "First-launch disclaimer requires the practitioner to confirm licensing and patient consent before any capture is allowed.",
-  },
-  {
-    title: "Single language for findings",
-    body:
-      "Every metric tags a domain on the published wheel; every flagged region is shown in its domain hue. Results read the same way every time.",
   },
 ];
 
@@ -52,12 +53,10 @@ export default function AppPage() {
             The app
           </p>
           <h1 className="mt-4 max-w-3xl font-display text-5xl tracking-tight md:text-6xl">
-            iPhone, TrueDepth, on-device.
+            FaceMap is a digital FAS™.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
-            FaceMap runs on any iPhone with a TrueDepth front camera. Capture,
-            analysis, and rendering all happen on-device — your patient&apos;s
-            face never touches the cloud.
+            FaceMap brings the Facial Assessment Scale to iPhone. Capture a 3D face mesh, grade five facets, plot the radar, and see which Holistic Individualised Treatment(s) address the priorities — all on-device. Built for licensed practitioners.
           </p>
         </div>
       </section>
@@ -90,12 +89,10 @@ export default function AppPage() {
               v0.1 metrics
             </p>
             <h2 className="font-display text-3xl tracking-tight md:text-4xl">
-              Five geometric measurements.
+              Five geometric metrics — quantifying Proportions &amp; Symmetry.
             </h2>
             <p className="mt-2 max-w-2xl text-[var(--color-ink-dim)]">
-              Each metric runs after every capture and contributes to the
-              flagged-regions overlay. All five sit in the Symmetry &amp;
-              proportions quadrant of the framework.
+              Proportions and Symmetry are quantified by geometry directly. The other three FAS facets — Skin quality, Facial shape, Expression — are graded by direct practitioner observation in v0.1.
             </p>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-2">
@@ -119,24 +116,21 @@ export default function AppPage() {
           <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
             <div>
               <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-                On the model
+                On the radar
               </p>
               <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
-                Severity reads as more domain.
+                Severity reads as more facet.
               </h2>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                A flagged region is rendered in its domain hue at an opacity
-                that scales with severity. Mild is a whisper. Significant is
-                fully saturated. The visual gradient is the framework, not a
-                separate alarm scheme.
+                Each facet axis carries a marker at its current grade. With each subsequent treatment, the lines of the FAS move closer to point 0 — the centre — indicating milder deficits.
               </p>
             </div>
             <div className="rounded-[var(--radius-sheet)] border hairline bg-[var(--color-surface)] p-7">
               <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
-                Symmetry &amp; proportions
+                Proportions facet
               </p>
               <div className="mt-4">
-                <SeverityRamp domain="symmetry" />
+                <SeverityRamp hue={facets.proportions.hue} />
               </div>
             </div>
           </div>

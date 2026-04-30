@@ -19,10 +19,7 @@ export default function AboutPage() {
             Built by the team that authored the framework.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
-            FaceMap is developed by Dr Andreas Nikolis and team. The
-            four-domain Facial Aesthetic framework was published by the team and
-            is implemented end-to-end inside the app — from the colour of every
-            quadrant to the severity ramp on every region.
+            FaceMap is developed by Dr Andreas Nikolis and team. The AART-HIT™ methodology — and its diagnostic tool, the Facial Assessment Scale (FAS™) — was published by the team in <em>Clinical, Cosmetic and Investigational Dermatology</em> in 2024 and is implemented end-to-end inside the app, from the FAS radar on capture to the HIT mapping on the analysis screen.
           </p>
         </div>
       </section>
@@ -56,24 +53,13 @@ export default function AboutPage() {
                 The thesis.
               </h2>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                Aesthetic assessment has long needed a shared vocabulary.
-                Practitioners observe the same things — proportions,
-                asymmetry, line behaviour, surface optics, volume — but
-                describe them in their own terms. The four-domain framework is
-                an attempt to give every observation a single home, so that
-                conversations between practitioners (and between practitioner
-                and patient) start from the same map.
+                Aesthetic assessment has long needed a shared vocabulary. Practitioners observe the same things — skin quality, facial shape, proportions, symmetry, expression — but describe them in their own terms. The FAS™ is an attempt to give every observation a single home, so that conversations between practitioners (and between practitioner and patient) start from the same map.
               </p>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                FaceMap implements that map directly. The wheel you see in the
-                literature is the wheel you see in the app — and on this site.
-                Severity is encoded as opacity of the domain hue, so the eye
-                reads severity as <em>more domain</em>, not as a separate alarm
-                signal.
+                FaceMap implements that map directly. The radar you see in the literature is the radar you see in the app — and on this site. Severity is encoded as opacity of the facet hue, so the eye reads severity as <em>more facet</em>, not as a separate alarm signal.
               </p>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                The app is a planning aid. The clinical decision is, and stays,
-                the practitioner&apos;s.
+                The app is a planning aid. The clinical decision is, and stays, the practitioner&apos;s.
               </p>
             </div>
           </div>

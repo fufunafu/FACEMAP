@@ -22,15 +22,15 @@ const FAQ = [
   },
   {
     q: "What does FaceMap actually measure?",
-    a: "v0.1 implements five geometric metrics — facial thirds, fifths, golden ratio, canthal tilt, and surface asymmetry — all in the Symmetry & proportions quadrant of the Nikolis framework.",
+    a: "v0.1 implements five geometric metrics — facial thirds, fifths, golden ratio, canthal tilt, and surface asymmetry — that quantify the Proportions and Symmetry facets of the FAS™. The other three facets (Skin quality, Facial shape, Expression) are graded by direct practitioner observation.",
   },
   {
     q: "Do you support Android?",
     a: "Not currently. FaceMap relies on the iPhone’s TrueDepth front camera for high-fidelity 3D capture.",
   },
   {
-    q: "Will the other three quadrants be quantified?",
-    a: "They are on the roadmap. The framework is published in full; v0.1 of the app implements measurement for the Symmetry & proportions quadrant. The wheel visualisation already reflects the full framework.",
+    q: "Will the other facets be quantified?",
+    a: "They are on the roadmap. The FAS™ is published in full; v0.1 of the app implements measurement for Proportions and Symmetry. The radar visualisation already reflects all five facets.",
   },
 ];
 
