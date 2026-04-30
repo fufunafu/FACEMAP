@@ -13,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/range",
     "/anatomy",
     "/lip-assessment",
+    "/tools",
     "/decision-aid",
     "/app",
     "/methodology",
@@ -25,8 +26,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
   ];
 
   const hitRoutes = hitOrder.map((id) => `/hits/${id}`);
+  const toolRoutes = [
+    "scalp-grid",
+    "filler-picker",
+    "pinch-test",
+    "lip-priorities",
+    "age-sequencer",
+    "eye-area",
+    "profile-balance",
+    "plan-builder",
+    "visit-log",
+  ].map((id) => `/tools/${id}`);
 
-  return [...staticRoutes, ...hitRoutes].map((path) => ({
+  return [...staticRoutes, ...hitRoutes, ...toolRoutes].map((path) => ({
     url: `${BASE}${path}`,
     lastModified: now,
     changeFrequency: "monthly",

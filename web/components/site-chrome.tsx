@@ -9,7 +9,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: "/fas", label: "FAS" },
   { href: "/hits", label: "HITs" },
   { href: "/range", label: "Range" },
-  { href: "/decision-aid", label: "Decision aid" },
+  { href: "/tools", label: "Tools" },
   { href: "/app", label: "App" },
 ];
 
@@ -66,6 +66,7 @@ export function Footer() {
               { href: "/hits", label: "HITs" },
               { href: "/range", label: "Range" },
               { href: "/anatomy", label: "Anatomy" },
+              { href: "/tools", label: "Tools" },
               { href: "/decision-aid", label: "Decision aid" },
               { href: "/app", label: "App" },
               { href: "/methodology", label: "Methodology" },
