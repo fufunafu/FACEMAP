@@ -73,10 +73,11 @@ export function MobileNav() {
       if (e.key === "Escape") setOpen(false);
     };
     document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = prev;
     };
   }, [open]);
 
@@ -113,19 +114,24 @@ export function MobileNav() {
         }}
       />
 
-      {/* Sheet */}
+      {/*
+        Sheet — absolute layout so header/footer can never collapse the body.
+        Header pinned at top:0, footer pinned at bottom:0, body fills the gap
+        with explicit top/bottom offsets and its own scroll.
+      */}
       <div
         id="mobile-nav-sheet"
         role="dialog"
         aria-modal="true"
         aria-hidden={!open}
-        className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[360px] flex-col bg-[var(--color-canvas)] shadow-2xl transition-transform duration-300 ease-out md:hidden"
+        className="fixed top-0 bottom-0 right-0 z-50 w-full max-w-[360px] bg-[var(--color-canvas)] shadow-2xl transition-transform duration-300 ease-out md:hidden"
         style={{
           transform: open ? "translateX(0)" : "translateX(100%)",
+          height: "100dvh",
         }}
       >
         {/* Header */}
-        <div className="flex h-14 items-center justify-between border-b hairline px-5">
+        <div className="absolute inset-x-0 top-0 z-10 flex h-14 items-center justify-between border-b hairline bg-[var(--color-canvas)] px-5">
           <Link href="/" className="flex items-center gap-2" onClick={() => setOpen(false)}>
             <BrandMark size={22} />
             <span className="font-display text-base tracking-tight">FaceMap</span>
@@ -142,27 +148,31 @@ export function MobileNav() {
           </button>
         </div>
 
-        {/* Body — scrollable */}
+        {/* Body — absolute, scrollable, between header (56px) and footer (~140px) */}
         <nav
           aria-label="Mobile"
-          className="flex-1 overflow-y-auto overscroll-contain px-5 py-6"
+          className="absolute inset-x-0 overflow-y-auto overscroll-contain px-5 py-6"
+          style={{ top: 56, bottom: 140 }}
         >
           {SECTIONS.map((section) => (
             <div key={section.title} className="mb-7 last:mb-0">
               <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--color-ink-muted)]">
                 {section.title}
               </p>
-              <ul className="mt-2 -mx-2 flex flex-col">
+              <ul className="mt-3 space-y-0.5">
                 {section.items.map((item) => {
                   const active = pathname === item.href;
                   return (
                     <li key={item.href}>
                       <Link
                         href={item.href}
-                        className="flex min-h-[44px] items-center justify-between rounded-lg px-2 py-2.5 text-base font-display tracking-tight transition"
+                        className="flex min-h-[44px] items-center justify-between gap-3 rounded-md px-2 py-2 text-base font-display tracking-tight transition"
                         style={{
                           color: active ? "var(--color-ink)" : "var(--color-ink-dim)",
                           fontWeight: active ? 500 : 400,
+                          backgroundColor: active
+                            ? "color-mix(in srgb, var(--color-ink) 6%, transparent)"
+                            : "transparent",
                         }}
                       >
                         <span>{item.label}</span>
@@ -182,9 +192,12 @@ export function MobileNav() {
           ))}
         </nav>
 
-        {/* Footer — persistent CTA + theme + legal */}
-        <div className="border-t hairline px-5 pb-6 pt-4">
-          <div className="flex items-center justify-between gap-3">
+        {/* Footer — pinned at bottom */}
+        <div
+          className="absolute inset-x-0 bottom-0 border-t hairline bg-[var(--color-canvas)] px-5 pb-6 pt-4"
+          style={{ paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+        >
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={toggleTheme}
@@ -210,7 +223,7 @@ export function MobileNav() {
               Get access
             </Link>
           </div>
-          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--color-ink-muted)]">
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-[var(--color-ink-muted)]">
             <Link href="/legal/disclaimer" className="hover:text-[var(--color-ink-dim)]">Disclaimer</Link>
             <Link href="/legal/privacy" className="hover:text-[var(--color-ink-dim)]">Privacy</Link>
             <Link href="/legal/terms" className="hover:text-[var(--color-ink-dim)]">Terms</Link>
