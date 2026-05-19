@@ -25,6 +25,13 @@ final class PatientCase {
     /// Treat `nil` and `""` interchangeably at call sites.
     var notes: String?
 
+    /// Oblique-left capture (patient turned to their right). Optional so single-pose
+    /// records from before multi-pose capture continue to load. The frontal pose lives
+    /// in `capturedFaceJSON`; this and `obliqueRCapturedFaceJSON` are the two side poses.
+    @Attribute(.externalStorage) var obliqueLCapturedFaceJSON: Data?
+    /// Oblique-right capture (patient turned to their left).
+    @Attribute(.externalStorage) var obliqueRCapturedFaceJSON: Data?
+
     init(id: UUID = UUID(),
          label: String,
          createdAt: Date = Date(),
@@ -32,7 +39,9 @@ final class PatientCase {
          metricResults: [MetricResult],
          patient: Patient? = nil,
          notes: String? = nil,
-         annotations: [AnnotationPin] = []) {
+         annotations: [AnnotationPin] = [],
+         obliqueL: CapturedFace? = nil,
+         obliqueR: CapturedFace? = nil) {
         self.id = id
         self.label = label
         self.createdAt = createdAt
@@ -43,10 +52,33 @@ final class PatientCase {
             ? nil
             : (try? JSONEncoder().encode(annotations))
         self.notes = notes
+        self.obliqueLCapturedFaceJSON = obliqueL.flatMap { try? JSONEncoder().encode($0) }
+        self.obliqueRCapturedFaceJSON = obliqueR.flatMap { try? JSONEncoder().encode($0) }
     }
 
     var capturedFace: CapturedFace? {
         try? JSONDecoder().decode(CapturedFace.self, from: capturedFaceJSON)
+    }
+
+    var obliqueLCapturedFace: CapturedFace? {
+        guard let data = obliqueLCapturedFaceJSON else { return nil }
+        return try? JSONDecoder().decode(CapturedFace.self, from: data)
+    }
+
+    var obliqueRCapturedFace: CapturedFace? {
+        guard let data = obliqueRCapturedFaceJSON else { return nil }
+        return try? JSONDecoder().decode(CapturedFace.self, from: data)
+    }
+
+    /// Reassemble the original `MultiPoseCapture` from the three stored faces.
+    /// Returns nil when the frontal pose can't be decoded.
+    var multiPoseCapture: MultiPoseCapture? {
+        guard let frontal = capturedFace else { return nil }
+        return MultiPoseCapture(
+            frontal: frontal,
+            obliqueL: obliqueLCapturedFace,
+            obliqueR: obliqueRCapturedFace
+        )
     }
 
     var metricResults: [MetricResult] {

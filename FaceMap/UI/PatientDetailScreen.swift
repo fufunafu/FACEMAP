@@ -119,7 +119,10 @@ struct PatientDetailScreen: View {
                     Spacer()
                     if let face = c.capturedFace {
                         NavigationLink {
-                            AnalysisScreen(face: face, existingCase: c)
+                            AnalysisScreen(
+                            multiPose: c.multiPoseCapture ?? MultiPoseCapture(frontal: face),
+                            existingCase: c
+                        )
                         } label: {
                             Text("Open")
                         }
@@ -254,7 +257,10 @@ struct PatientDetailScreen: View {
                 .buttonStyle(.plain)
             } else if let face = c.capturedFace {
                 NavigationLink {
-                    AnalysisScreen(face: face, existingCase: c)
+                    AnalysisScreen(
+                            multiPose: c.multiPoseCapture ?? MultiPoseCapture(frontal: face),
+                            existingCase: c
+                        )
                 } label: {
                     visitRowContent(c, isSelected: false)
                 }

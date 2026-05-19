@@ -10,9 +10,29 @@ struct AnalysisScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var store: CaseStore
 
-    let face: CapturedFace
+    /// Full set of poses for this visit. The pose-switcher chooses which one drives
+    /// the mesh + metrics + construction overlays. Single-pose callers wrap a single
+    /// `CapturedFace` in `MultiPoseCapture(frontal:)`.
+    let multiPose: MultiPoseCapture
     /// When opened from a stored case, edits go back to that case.
     var existingCase: PatientCase? = nil
+
+    @State private var activePose: CapturePose = .frontal
+
+    /// Currently-displayed face — driven by `activePose`. All downstream UI consumes this.
+    private var face: CapturedFace { multiPose.face(for: activePose) }
+
+    init(multiPose: MultiPoseCapture, existingCase: PatientCase? = nil) {
+        self.multiPose = multiPose
+        self.existingCase = existingCase
+    }
+
+    /// Convenience for legacy / single-pose callers (saved cases that only have a
+    /// frontal capture). Wraps the single face in a `MultiPoseCapture`.
+    init(face: CapturedFace, existingCase: PatientCase? = nil) {
+        self.multiPose = MultiPoseCapture(frontal: face)
+        self.existingCase = existingCase
+    }
 
     @State private var results: [MetricResult] = []
     @State private var saveLabel = ""
@@ -74,6 +94,11 @@ struct AnalysisScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
+                    if multiPose.availablePoses.count > 1 {
+                        posePicker
+                            .padding(.horizontal, 16)
+                    }
+
                     findingsSection
 
                     moreSection
@@ -108,6 +133,12 @@ struct AnalysisScreen: View {
         .sheet(item: $pdfShareItem) { item in
             ShareSheet(items: [item.url])
         }
+        .onChange(of: activePose) { _, _ in
+            // Re-evaluate metrics against the newly-selected pose so the findings list
+            // and construction overlays reflect what's on screen.
+            results = MetricRegistry.defaultRegistry()
+                .evaluateAll(on: AnalyzableFace(face))
+        }
         .task {
             results = MetricRegistry.defaultRegistry()
                 .evaluateAll(on: AnalyzableFace(face))
@@ -124,6 +155,30 @@ struct AnalysisScreen: View {
             if let c = existingCase {
                 c.notes = newValue
                 try? store.context.save()
+            }
+        }
+    }
+
+    // MARK: - Pose picker (shown when this case has more than one pose)
+
+    private var posePicker: some View {
+        HStack(spacing: 8) {
+            ForEach(multiPose.availablePoses) { pose in
+                Button {
+                    if activePose != pose { activePose = pose }
+                } label: {
+                    Text(pose.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(pose == activePose ? Theme.canvas : Theme.ink)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            Capsule().fill(pose == activePose ? Theme.ink : Theme.surface)
+                        )
+                        .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
             }
         }
     }
@@ -314,8 +369,16 @@ struct AnalysisScreen: View {
                     Button("Save") {
                         let label = saveLabel.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !label.isEmpty else { return }
-                        let pc = PatientCase(label: label, capturedFace: face,
-                                             metricResults: results, notes: notes)
+                        // Frontal pose is the primary `capturedFace`; the obliques get
+                        // saved to dedicated fields so the case round-trips with all three.
+                        let pc = PatientCase(
+                            label: label,
+                            capturedFace: multiPose.frontal,
+                            metricResults: results,
+                            notes: notes,
+                            obliqueL: multiPose.obliqueL,
+                            obliqueR: multiPose.obliqueR
+                        )
                         store.save(pc)
                         showingSaveSheet = false
                         dismiss()
