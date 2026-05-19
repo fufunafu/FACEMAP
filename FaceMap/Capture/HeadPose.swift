@@ -29,7 +29,7 @@ struct HeadPose: Equatable {
         let worst = max(p, max(y, r))
         guard worst > 0 else { return nil }
         if worst == p {
-            return String(format: "Head tilted %s by %.0f°",
+            return String(format: "Head tilted %@ by %.0f°",
                           pitchDegrees > 0 ? "up" : "down", abs(pitchDegrees))
         }
         if worst == y {
