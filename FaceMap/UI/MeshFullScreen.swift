@@ -8,6 +8,8 @@ struct MeshFullScreen: View {
     let face: CapturedFace
     let regionSeverity: [FacialRegion: MetricResult.Severity]
     let regionDomain: [FacialRegion: FaceDomain]
+    /// Per-metric geometric overlays to render on the mesh. Empty = clean mesh.
+    var constructions: [MetricConstruction] = []
 
     @StateObject private var controller = FaceMeshController()
 
@@ -17,7 +19,8 @@ struct MeshFullScreen: View {
                 face: face,
                 regionSeverity: regionSeverity,
                 regionDomain: regionDomain,
-                controller: controller
+                controller: controller,
+                constructions: constructions
             )
             .ignoresSafeArea()
 

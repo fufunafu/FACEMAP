@@ -17,6 +17,10 @@ struct DomainDetailScreen: View {
     @State private var selectedRegion: FacialRegion?
     @StateObject private var meshController = FaceMeshController()
     @State private var showingFullscreen = false
+    /// When ON, the metric-construction overlays (lines, centroid markers, mm/° labels)
+    /// are rendered on top of the mesh. Default ON: this view is the practitioner's
+    /// drill-in to see *why* a number was reported.
+    @State private var showConstruction = true
 
     /// Only metrics whose domain matches.
     private var inDomain: [MetricResult] {
@@ -27,6 +31,16 @@ struct DomainDetailScreen: View {
     private var domainRegionSeverity: [FacialRegion: MetricResult.Severity] {
         let domainRegions = Set(inDomain.flatMap { $0.regions })
         return regionSeverity.filter { domainRegions.contains($0.key) }
+    }
+
+    /// Construction overlays for every metric in this domain that opts in via
+    /// `VisuallyExplainable`. Returns empty when the user has the toggle off.
+    private var domainConstructions: [MetricConstruction] {
+        guard showConstruction else { return [] }
+        let af = AnalyzableFace(face)
+        return MetricRegistry.defaultRegistry().metrics
+            .filter { type(of: $0).domain == domain }
+            .compactMap { $0.construction(for: af) }
     }
 
     var body: some View {
@@ -72,7 +86,8 @@ struct DomainDetailScreen: View {
             MeshFullScreen(
                 face: face,
                 regionSeverity: domainRegionSeverity,
-                regionDomain: regionDomain
+                regionDomain: regionDomain,
+                constructions: domainConstructions
             )
         }
     }
@@ -80,15 +95,16 @@ struct DomainDetailScreen: View {
     // MARK: - Mesh card
 
     private var meshCard: some View {
-        Button { showingFullscreen = true } label: {
-            ZStack(alignment: .bottomTrailing) {
+        ZStack(alignment: .bottomTrailing) {
+            Button { showingFullscreen = true } label: {
                 FaceMeshOverlay(
                     face: face,
                     regionSeverity: domainRegionSeverity,
                     regionDomain: regionDomain,
                     controller: meshController,
                     interactive: false,
-                    backgroundColor: UIColor(Theme.surfaceRaised)
+                    backgroundColor: UIColor(Theme.surfaceRaised),
+                    constructions: domainConstructions
                 )
                 .frame(height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
@@ -96,17 +112,38 @@ struct DomainDetailScreen: View {
                     RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
                         .stroke(Theme.hairline, lineWidth: 1)
                 )
-
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .padding(8)
-                    .background(.regularMaterial, in: Circle())
-                    .padding(10)
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open 3D viewer fullscreen")
+
+            HStack(spacing: 6) {
+                Button {
+                    showConstruction.toggle()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: showConstruction ? "ruler.fill" : "ruler")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(showConstruction ? "Hide" : "Show how")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                }
+                .accessibilityLabel(showConstruction ? "Hide construction" : "Show construction")
+
+                Button { showingFullscreen = true } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                        .padding(8)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel("Open 3D viewer fullscreen")
+            }
+            .padding(10)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Open 3D viewer fullscreen")
     }
 
     // MARK: - Metric row + drill-in

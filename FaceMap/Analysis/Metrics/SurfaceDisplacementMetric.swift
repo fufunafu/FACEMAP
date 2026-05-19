@@ -26,7 +26,7 @@ import simd
 struct SurfaceDisplacementMetric: FaceMetric {
     static let id = "structural.surfaceDisplacement"
     static let displayName = "Surface displacement"
-    static let domain: FaceDomain = .structural
+    static let domain: FaceDomain = .facialShape
 
     /// Threshold (metres) above which a pair Z-difference is reported as a deficit.
     private static let thresholdMeters: Double = 0.0015      // 1.5 mm

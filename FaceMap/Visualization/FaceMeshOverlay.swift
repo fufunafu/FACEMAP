@@ -107,6 +107,9 @@ struct FaceMeshOverlay: UIViewRepresentable {
     /// the deliberate "spotlight" treatment used in the full-screen viewer). Pass
     /// `Theme.surface` for thumbnail previews that should blend into a card.
     var backgroundColor: UIColor = UIColor(Theme.meshCanvas)
+    /// Per-metric geometric overlays (markers, lines, billboard labels) rendered on
+    /// top of the mesh. Empty = clean mesh. Built via the `VisuallyExplainable` protocol.
+    var constructions: [MetricConstruction] = []
 
     final class Coordinator: NSObject {
         weak var controller: FaceMeshController?
@@ -178,7 +181,7 @@ struct FaceMeshOverlay: UIViewRepresentable {
 
     private func rebuild(into view: ARView) {
         view.scene.anchors.removeAll()
-        guard let entity = buildMeshEntity() else { return }
+        guard let (entity, centroid) = buildMeshEntity() else { return }
 
         let anchor = AnchorEntity(world: [0, 0, -0.4])
         anchor.addChild(entity)
@@ -190,12 +193,19 @@ struct FaceMeshOverlay: UIViewRepresentable {
         light.orientation = simd_quatf(angle: -.pi / 6, axis: [1, 0, 0])
         anchor.addChild(light)
 
+        if !constructions.isEmpty {
+            MetricConstructionRenderer.render(
+                constructions, on: entity, centroid: centroid
+            )
+        }
+
         controller.attach(entity)
     }
 
     /// Build a `ModelEntity` whose vertices are pre-centered on the face centroid,
-    /// so rotation and scale pivot around the centroid.
-    private func buildMeshEntity() -> ModelEntity? {
+    /// so rotation and scale pivot around the centroid. Returns the entity AND the
+    /// centroid that was used so overlay renderers can align in the same frame.
+    private func buildMeshEntity() -> (ModelEntity, SIMD3<Float>)? {
         let raw = face.vertices
         guard !raw.isEmpty, !face.triangleIndices.isEmpty else { return nil }
 
@@ -215,7 +225,8 @@ struct FaceMeshOverlay: UIViewRepresentable {
         material.roughness = 0.7
         material.metallic = 0.0
 
-        return ModelEntity(mesh: resource, materials: [material])
+        let entity = ModelEntity(mesh: resource, materials: [material])
+        return (entity, centroid)
     }
 
     private func vertexColors(vertexCount: Int) -> [SIMD4<Float>] {

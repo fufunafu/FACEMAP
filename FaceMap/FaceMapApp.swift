@@ -7,6 +7,10 @@ struct FaceMapApp: App {
     let store: CaseStore
 
     init() {
+        // iOS-17-compatible billboarding for metric-construction labels (replaces the
+        // iOS-18-only `BillboardComponent`). Must register before any scene is built.
+        BillboardSystem.register()
+
         do {
             container = try ModelContainer(
                 for: FaceMapSchema.current,
