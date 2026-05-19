@@ -114,10 +114,11 @@ struct AboutScreen: View {
 
     private func domainBlurb(_ d: FaceDomain) -> String {
         switch d {
-        case .mechanical: return "Static line effacement and dynamic distortion."
-        case .optical:    return "Surface abnormality and loss of shadows."
-        case .symmetry:   return "Proportions, asymmetry, canthal tilt."
-        case .structural: return "Periorbital fullness, midface volume, lower-face balance."
+        case .skinQuality: return "Loss of radiance, glow, and firmness."
+        case .facialShape: return "Sagging and volume loss across midface, lower face, and jawline."
+        case .proportions: return "Facial thirds and fifths, golden-ratio relationships."
+        case .symmetry:    return "Lateral pair asymmetry and canthal tilt."
+        case .expression:  return "Static lines and dynamic distortion at rest and on animation."
         }
     }
 }

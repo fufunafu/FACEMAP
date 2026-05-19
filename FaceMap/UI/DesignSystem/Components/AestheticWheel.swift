@@ -194,11 +194,15 @@ struct AestheticWheel: View {
     }
 
     private func quadrantBoundsDegrees(_ domain: FaceDomain) -> (start: Double, end: Double) {
+        // Five FAS facets mapped onto four visual quadrants (Expression shares the top-left
+        // slot with SkinQuality — they cluster as "ageing / surface" facets in the original
+        // illustration). Proper 5-sector layout is a v0.6 follow-up.
         switch domain {
-        case .mechanical: return (180, 270)  // top-left
-        case .optical:    return (270, 360)  // top-right
-        case .structural: return (0, 90)     // bottom-right
-        case .symmetry:   return (90, 180)   // bottom-left
+        case .skinQuality: return (180, 270)  // top-left
+        case .expression:  return (180, 270)  // top-left (shared)
+        case .facialShape: return (0, 90)     // bottom-right
+        case .proportions: return (270, 360)  // top-right
+        case .symmetry:    return (90, 180)   // bottom-left
         }
     }
 
@@ -213,12 +217,13 @@ struct AestheticWheel: View {
     }
 
     private func domain(forAngle deg: Double) -> FaceDomain {
-        // Map clockwise CG angle to quadrant.
+        // Map clockwise CG angle to quadrant. Top-left shows skinQuality (expression
+        // shares this slot in the current 4-of-5 layout).
         switch deg {
-        case 0..<90:    return .structural
+        case 0..<90:    return .facialShape
         case 90..<180:  return .symmetry
-        case 180..<270: return .mechanical
-        default:        return .optical
+        case 180..<270: return .skinQuality
+        default:        return .proportions
         }
     }
 

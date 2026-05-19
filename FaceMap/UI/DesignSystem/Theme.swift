@@ -27,11 +27,13 @@ enum Theme {
 
     // MARK: Domain hues — one per quadrant of the Aesthetic Wheel
 
-    static let domainMechanical = Color(hex: 0xC9BBEE) // lavender
-    static let domainOptical    = Color(hex: 0x7A8094) // slate (foreground tint of #3F4456 fill)
-    static let domainOpticalFill = Color(hex: 0x3F4456)
-    static let domainSymmetry   = Color(hex: 0xE9B5E0) // magenta-pink
-    static let domainStructural = Color(hex: 0xA6B4DD) // periwinkle
+    // Five domain hues — one per facet of Dr Nikolis's framework
+    static let domainSkinQuality = Color(hex: 0x7A8094) // slate (was Optical)
+    static let domainSkinQualityFill = Color(hex: 0x3F4456)
+    static let domainFacialShape = Color(hex: 0xA6B4DD) // periwinkle (was Structural)
+    static let domainProportions = Color(hex: 0x9AB2D6) // soft blue
+    static let domainSymmetry    = Color(hex: 0xE9B5E0) // magenta-pink
+    static let domainExpression  = Color(hex: 0xC9BBEE) // lavender (was Mechanical)
 
     // MARK: Geometry
 
@@ -46,18 +48,19 @@ enum Theme {
 extension FaceDomain {
     var hue: Color {
         switch self {
-        case .mechanical: return Theme.domainMechanical
-        case .optical:    return Theme.domainOptical
-        case .symmetry:   return Theme.domainSymmetry
-        case .structural: return Theme.domainStructural
+        case .skinQuality: return Theme.domainSkinQuality
+        case .facialShape: return Theme.domainFacialShape
+        case .proportions: return Theme.domainProportions
+        case .symmetry:    return Theme.domainSymmetry
+        case .expression:  return Theme.domainExpression
         }
     }
 
-    /// Foreground hue for fill-style backgrounds (Optical's slate is too dark to read on).
+    /// Foreground hue for fill-style backgrounds (SkinQuality's slate is too dark to read on).
     var fillHue: Color {
         switch self {
-        case .optical: return Theme.domainOpticalFill
-        default:       return hue
+        case .skinQuality: return Theme.domainSkinQualityFill
+        default:           return hue
         }
     }
 }

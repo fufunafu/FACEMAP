@@ -9,8 +9,9 @@ struct WheelGlyph: View {
     let results: [MetricResult]
     var diameter: CGFloat = 28
 
-    /// Order matches `FaceDomain.wheelQuadrant`: TL, TR, BL, BR.
-    private static let quadrantOrder: [FaceDomain] = [.mechanical, .optical, .symmetry, .structural]
+    /// Four quadrants — TL, TR, BL, BR. Expression shares the SkinQuality slot since
+    /// the wheel illustration only has 4 visual quadrants; 5-sector layout is a follow-up.
+    private static let quadrantOrder: [FaceDomain] = [.skinQuality, .proportions, .symmetry, .facialShape]
 
     var body: some View {
         ZStack {

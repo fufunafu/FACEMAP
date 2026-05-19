@@ -21,10 +21,11 @@ struct DomainBadge: View {
 
     private var short: String {
         switch domain {
-        case .mechanical: return "Mechanical"
-        case .optical:    return "Optical"
-        case .symmetry:   return "Symmetry"
-        case .structural: return "Structural"
+        case .skinQuality: return "Skin"
+        case .facialShape: return "Shape"
+        case .proportions: return "Proportions"
+        case .symmetry:    return "Symmetry"
+        case .expression:  return "Expression"
         }
     }
 }

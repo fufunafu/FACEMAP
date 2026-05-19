@@ -269,10 +269,11 @@ private extension FaceDomain {
     /// SIMD4 representation of the domain hue used for mesh shading.
     var hueRGB: SIMD4<Float> {
         switch self {
-        case .mechanical: return SIMD4(0.788, 0.733, 0.933, 1) // #C9BBEE
-        case .optical:    return SIMD4(0.478, 0.502, 0.580, 1) // #7A8094
-        case .symmetry:   return SIMD4(0.914, 0.710, 0.878, 1) // #E9B5E0
-        case .structural: return SIMD4(0.651, 0.706, 0.867, 1) // #A6B4DD
+        case .skinQuality: return SIMD4(0.478, 0.502, 0.580, 1) // #7A8094 slate
+        case .facialShape: return SIMD4(0.651, 0.706, 0.867, 1) // #A6B4DD periwinkle
+        case .proportions: return SIMD4(0.604, 0.698, 0.839, 1) // #9AB2D6 soft blue
+        case .symmetry:    return SIMD4(0.914, 0.710, 0.878, 1) // #E9B5E0 magenta-pink
+        case .expression:  return SIMD4(0.788, 0.733, 0.933, 1) // #C9BBEE lavender
         }
     }
 }

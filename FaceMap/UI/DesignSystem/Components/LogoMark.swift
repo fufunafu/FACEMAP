@@ -23,10 +23,10 @@ struct LogoMark: View {
             // Quadrant slices — start angles in SwiftUI convention
             // (0° = 3 o'clock, +clockwise because y is down on screen).
             let slices: [(start: Angle, end: Angle, color: Color)] = [
-                (.degrees(-90), .degrees(0),   Theme.domainOptical),     // top-right
-                (.degrees(0),   .degrees(90),  Theme.domainStructural),  // bottom-right
+                (.degrees(-90), .degrees(0),   Theme.domainProportions), // top-right
+                (.degrees(0),   .degrees(90),  Theme.domainFacialShape), // bottom-right
                 (.degrees(90),  .degrees(180), Theme.domainSymmetry),    // bottom-left
-                (.degrees(180), .degrees(270), Theme.domainMechanical),  // top-left
+                (.degrees(180), .degrees(270), Theme.domainSkinQuality), // top-left
             ]
 
             for slice in slices {
