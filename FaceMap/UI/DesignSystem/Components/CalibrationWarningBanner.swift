@@ -7,26 +7,26 @@ struct CalibrationWarningBanner: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xB45309))
+                .font(Type.control)
+                .foregroundStyle(Theme.warning)
 
             Text(DisclaimerCopy.uncalibratedWarning)
                 .font(Type.caption)
-                .foregroundStyle(Color(hex: 0x78350F))
+                .foregroundStyle(Theme.warningInk)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0xB45309))
+                .font(Type.labelSmall)
+                .foregroundStyle(Theme.warning)
         }
         .padding(.vertical, 10)
         .padding(.horizontal, 14)
-        .background(Color(hex: 0xFEF3C7))
+        .background(Theme.warningBg)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
-                .stroke(Color(hex: 0xB45309).opacity(0.25), lineWidth: 1)
+                .stroke(Theme.warning.opacity(0.25), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
         .accessibilityHint("Opens landmark calibration")

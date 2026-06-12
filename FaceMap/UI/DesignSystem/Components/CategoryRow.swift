@@ -57,7 +57,7 @@ struct CategoryRow: View {
             Spacer(minLength: 8)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
+                .font(Type.captionStrong)
                 .foregroundStyle(Theme.inkMuted)
         }
         .padding(.vertical, 14)

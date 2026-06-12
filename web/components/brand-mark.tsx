@@ -1,4 +1,34 @@
-import { domainHues } from "@/lib/tokens";
+import { facetHues } from "@/lib/tokens";
+
+/**
+ * Circular five-slice FaceMap mark — one 72° slice per FAS facet, clockwise
+ * from 12 o'clock in facet order. Mirrors
+ * FaceMap/UI/DesignSystem/Components/LogoMark.swift.
+ */
+
+const FACET_ORDER = [
+  "skinQuality",
+  "facialShape",
+  "proportions",
+  "symmetry",
+  "expression",
+] as const;
+
+const C = 16;
+const R = 15;
+
+function point(deg: number) {
+  const a = (deg * Math.PI) / 180;
+  return `${(C + R * Math.cos(a)).toFixed(2)} ${(C + R * Math.sin(a)).toFixed(2)}`;
+}
+
+const SLICES = FACET_ORDER.map((id, i) => {
+  const start = -90 + i * 72;
+  return {
+    id,
+    d: `M ${C} ${C} L ${point(start)} A ${R} ${R} 0 0 1 ${point(start + 72)} Z`,
+  };
+});
 
 export function BrandMark({ size = 24 }: { size?: number }) {
   return (
@@ -10,10 +40,9 @@ export function BrandMark({ size = 24 }: { size?: number }) {
       aria-label="FaceMap"
     >
       <circle cx="16" cy="16" r="15" fill="var(--color-wheel-bg, #000)" stroke="var(--color-hairline)" strokeWidth="1" />
-      <path d="M 16 1 A 15 15 0 0 1 31 16 L 16 16 Z" fill={domainHues.optical} />
-      <path d="M 31 16 A 15 15 0 0 1 16 31 L 16 16 Z" fill={domainHues.structural} />
-      <path d="M 16 31 A 15 15 0 0 1 1 16 L 16 16 Z" fill={domainHues.symmetry} />
-      <path d="M 1 16 A 15 15 0 0 1 16 1 L 16 16 Z" fill={domainHues.mechanical} />
+      {SLICES.map((slice) => (
+        <path key={slice.id} d={slice.d} fill={facetHues[slice.id]} />
+      ))}
       <circle cx="16" cy="16" r="4" fill="var(--color-wheel-hub, #000)" />
     </svg>
   );

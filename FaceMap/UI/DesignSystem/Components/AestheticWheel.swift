@@ -1,17 +1,22 @@
 import SwiftUI
 
-/// Mirrors Dr Andreas Nikolis's published Facial Aesthetic framework: four
-/// quadrants (one per `FaceDomain`), three concentric severity rings (1/2/3),
-/// metrics plotted as dots on radial axes inside their domain quadrant.
+/// Mirrors Dr Andreas Nikolis's published Facial Assessment Scale (FAS): five
+/// 72° sectors (one per `FaceDomain`, Skin Quality starting at 12 o'clock),
+/// three concentric severity rings (1/2/3), metrics plotted as dots on radial
+/// axes inside their facet sector.
 ///
-/// Tap a quadrant to drill into that domain.
+/// Tap a sector to drill into that facet.
 struct AestheticWheel: View {
     /// Pre-grouped metric results, keyed by domain. Empty domains are rendered
-    /// as ghosted quadrants ("not yet measured").
+    /// as ghosted sectors ("not yet measured").
     let resultsByDomain: [FaceDomain: [MetricResult]]
     var diameter: CGFloat = 260
     var showsLabels: Bool = true
     var onTapDomain: ((FaceDomain) -> Void)? = nil
+
+    /// When labels are shown the wheel graphic shrinks inside the declared frame so the
+    /// sector names render fully within bounds (PDF rendering clips anything outside).
+    private var wheelScale: CGFloat { showsLabels ? 0.80 : 1.0 }
 
     var body: some View {
         ZStack {
@@ -33,7 +38,8 @@ struct AestheticWheel: View {
             let dx = location.x - center.x
             let dy = location.y - center.y
             let dist = hypot(dx, dy)
-            guard dist > diameter * 0.18, dist < diameter * 0.5 else { return }
+            let wheelDiameter = diameter * wheelScale
+            guard dist > wheelDiameter * 0.18, dist < wheelDiameter * 0.5 else { return }
             // CG angle: 0° = +x, 90° = +y (down), 180° = -x, 270° = -y (up).
             var deg = atan2(dy, dx) * 180.0 / .pi
             if deg < 0 { deg += 360 }
@@ -45,11 +51,11 @@ struct AestheticWheel: View {
 
     private func drawWheel(ctx: GraphicsContext, size: CGSize) {
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) / 2
+        let radius = min(size.width, size.height) / 2 * wheelScale
         let outer  = radius * 0.92
         let inner  = radius * 0.22
 
-        // 1. Quadrant fills (domain hue at low opacity, outer band brighter)
+        // 1. Sector fills (facet hue at low opacity, outer band brighter)
         for d in FaceDomain.allCases {
             let (start, end) = arcAngles(for: d, gapDegrees: 4)
             let fill = Path { p in
@@ -76,7 +82,7 @@ struct AestheticWheel: View {
         }
         ctx.stroke(outerStroke, with: .color(Theme.ink), lineWidth: 5)
 
-        // 3. Cut quadrant gaps over the band — light slits (canvas) so the four
+        // 3. Cut sector gaps over the band — light slits (canvas) so the five
         //    sectors read as separate.
         for d in FaceDomain.allCases {
             let edges = quadrantEdges(for: d)
@@ -103,7 +109,7 @@ struct AestheticWheel: View {
                        style: StrokeStyle(lineWidth: 0.5))
         }
 
-        // 5. Per-metric axes + dots inside each quadrant
+        // 5. Per-metric axes + dots inside each sector
         for d in FaceDomain.allCases {
             let metrics = resultsByDomain[d] ?? []
             guard !metrics.isEmpty else { continue }
@@ -153,35 +159,52 @@ struct AestheticWheel: View {
     private var labelOverlay: some View {
         GeometryReader { geo in
             let r = min(geo.size.width, geo.size.height) / 2
-            let positions: [(FaceDomain, CGPoint)] = FaceDomain.allCases.map { d in
-                let mid = midAngle(for: d) * .pi / 180
-                let pr = r * 1.02
-                return (d, CGPoint(
-                    x: geo.size.width / 2 + cos(mid) * pr,
-                    y: geo.size.height / 2 + sin(mid) * pr
-                ))
-            }
+            let wheelR = r * wheelScale
             ZStack {
-                ForEach(positions, id: \.0) { d, p in
-                    Text(d.displayName.uppercased())
-                        .font(.system(size: 9, weight: .semibold))
-                        .tracking(1.0)
-                        .foregroundStyle(Theme.ink)
-                        .position(p)
+                ForEach(FaceDomain.allCases) { d in
+                    sectorLabel(for: d, frame: geo.size, radius: r)
                 }
                 // Centre scale labels (1, 2, 3)
                 ForEach(1...3, id: \.self) { ring in
-                    let inner = r * 0.22
-                    let outer = r * 0.92
+                    let inner = wheelR * 0.22
+                    let outer = wheelR * 0.92
                     let rr = inner + (outer - inner) * CGFloat(ring) / 3.0
                     Text("\(ring)")
-                        .font(.system(size: 9))
+                        .font(Type.micro)
                         .foregroundStyle(Theme.inkMuted)
                         .position(x: geo.size.width / 2 + 4,
                                   y: geo.size.height / 2 - rr - 4)
                 }
             }
         }
+    }
+
+    /// Sector name at the sector's mid-angle, wrapped one word per line and nudged
+    /// inside the declared frame so labels at 72° spacing neither collide with each
+    /// other nor clip when the wheel renders into the PDF's fixed 200pt frame.
+    private func sectorLabel(for d: FaceDomain, frame: CGSize, radius r: CGFloat) -> some View {
+        let mid = midAngle(for: d) * .pi / 180
+        let lines = d.displayName.uppercased().split(separator: " ").map(String.init)
+        // Rough SF-semibold 9pt glyph metrics (~5.4pt/glyph + 1pt tracking).
+        let halfWidth  = CGFloat(lines.map(\.count).max() ?? 0) * 6.4 / 2 + 3
+        let halfHeight = CGFloat(lines.count) * 5.5 + 2
+        let raw = CGPoint(
+            x: frame.width / 2 + cos(mid) * r * 0.90,
+            y: frame.height / 2 + sin(mid) * r * 0.90
+        )
+        let p = CGPoint(
+            x: min(max(raw.x, halfWidth), frame.width - halfWidth),
+            y: min(max(raw.y, halfHeight), frame.height - halfHeight)
+        )
+        return Text(lines.joined(separator: "\n"))
+            .font(Type.micro)
+            .tracking(1.0)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 3)
+            .padding(.vertical, 1)
+            .background(Theme.canvas.opacity(0.85))
+            .position(p)
     }
 
     // MARK: - Geometry helpers
@@ -194,16 +217,10 @@ struct AestheticWheel: View {
     }
 
     private func quadrantBoundsDegrees(_ domain: FaceDomain) -> (start: Double, end: Double) {
-        // Five FAS facets mapped onto four visual quadrants (Expression shares the top-left
-        // slot with SkinQuality — they cluster as "ageing / surface" facets in the original
-        // illustration). Proper 5-sector layout is a v0.6 follow-up.
-        switch domain {
-        case .skinQuality: return (180, 270)  // top-left
-        case .expression:  return (180, 270)  // top-left (shared)
-        case .facialShape: return (0, 90)     // bottom-right
-        case .proportions: return (270, 360)  // top-right
-        case .symmetry:    return (90, 180)   // bottom-left
-        }
+        // Five 72° sectors, clockwise from 12 o'clock (270° in CG coordinates), in
+        // `FaceDomain.allCases` order — Skin Quality's leading edge sits at 12 o'clock.
+        let start = 270.0 + Double(domain.wheelOrder) * 72.0
+        return (start, start + 72.0)
     }
 
     private func quadrantEdges(for domain: FaceDomain) -> [Double] {
@@ -217,14 +234,11 @@ struct AestheticWheel: View {
     }
 
     private func domain(forAngle deg: Double) -> FaceDomain {
-        // Map clockwise CG angle to quadrant. Top-left shows skinQuality (expression
-        // shares this slot in the current 4-of-5 layout).
-        switch deg {
-        case 0..<90:    return .facialShape
-        case 90..<180:  return .symmetry
-        case 180..<270: return .skinQuality
-        default:        return .proportions
-        }
+        // Sectors run clockwise from 12 o'clock (270° CG) in `allCases` order, so
+        // every facet — including Expression — resolves to its own sector.
+        let offset = (deg - 270 + 360).truncatingRemainder(dividingBy: 360)
+        let index = min(max(Int(offset / 72), 0), FaceDomain.allCases.count - 1)
+        return FaceDomain.allCases[index]
     }
 
     private func polar(center: CGPoint, angle: Double, radius: CGFloat) -> CGPoint {

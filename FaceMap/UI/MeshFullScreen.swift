@@ -30,7 +30,7 @@ struct MeshFullScreen: View {
                     dismiss()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(Type.control)
                         .foregroundStyle(.white)
                         .padding(10)
                         .background(.ultraThinMaterial, in: Circle())
@@ -52,7 +52,8 @@ struct MeshFullScreen: View {
 }
 
 /// Shared preset-strip + reset button. Used in the full-screen viewer and in the
-/// per-domain detail screen.
+/// per-domain detail screen. Mesh-viewport overlay: white-on-black is deliberate
+/// (spotlight viewer), but sizes come from the Type scale.
 struct ViewerControls: View {
     let controller: FaceMeshController
 
@@ -63,7 +64,7 @@ struct ViewerControls: View {
                     controller.setPreset(preset)
                 } label: {
                     Text(preset.label)
-                        .font(.caption.weight(.semibold))
+                        .font(Type.captionStrong)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                 }
@@ -75,7 +76,7 @@ struct ViewerControls: View {
                 controller.reset()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
-                    .font(.caption.weight(.semibold))
+                    .font(Type.captionStrong)
                     .padding(8)
             }
             .background(.ultraThinMaterial, in: Circle())

@@ -1,13 +1,13 @@
 import SwiftUI
 
-/// Circular four-quadrant FaceMap logo. Mirrors web/components/brand-mark.tsx
-/// so the iOS app, marketing site, and PDF exports share one visual identity.
+/// Circular five-slice FaceMap logo — one 72° slice per FAS facet. Mirrors
+/// web/components/brand-mark.tsx so the iOS app, marketing site, and PDF
+/// exports share one visual identity.
 ///
-/// Quadrants (clockwise from 12 o'clock):
-///   - top-right    → Theme.domainOptical    (slate)
-///   - bottom-right → Theme.domainStructural (periwinkle)
-///   - bottom-left  → Theme.domainSymmetry   (magenta-pink)
-///   - top-left     → Theme.domainMechanical (lavender)
+/// Slices (clockwise from 12 o'clock, `FaceDomain.allCases` order):
+///   Theme.domainSkinQuality (lavender) → domainFacialShape (periwinkle) →
+///   domainProportions (slate) → domainSymmetry (magenta-pink) →
+///   domainExpression (peach).
 struct LogoMark: View {
     let size: CGFloat
 
@@ -20,14 +20,13 @@ struct LogoMark: View {
             let outerR = s / 2 - max(1, s * 0.03)
             let innerR = outerR * (4.0 / 15.0) // matches web hub ratio (r=4 of r=15)
 
-            // Quadrant slices — start angles in SwiftUI convention
+            // Five 72° slices from 12 o'clock — angles in SwiftUI convention
             // (0° = 3 o'clock, +clockwise because y is down on screen).
-            let slices: [(start: Angle, end: Angle, color: Color)] = [
-                (.degrees(-90), .degrees(0),   Theme.domainProportions), // top-right
-                (.degrees(0),   .degrees(90),  Theme.domainFacialShape), // bottom-right
-                (.degrees(90),  .degrees(180), Theme.domainSymmetry),    // bottom-left
-                (.degrees(180), .degrees(270), Theme.domainSkinQuality), // top-left
-            ]
+            let slices: [(start: Angle, end: Angle, color: Color)] =
+                FaceDomain.allCases.map { d in
+                    let start = -90.0 + Double(d.wheelOrder) * 72.0
+                    return (.degrees(start), .degrees(start + 72), d.hue)
+                }
 
             for slice in slices {
                 var path = Path()

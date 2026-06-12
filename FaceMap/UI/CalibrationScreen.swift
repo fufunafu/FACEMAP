@@ -14,6 +14,10 @@ struct CalibrationScreen: View {
     @State private var picked: [AnatomicalLandmark: Int] = [:]
     @State private var lastTappedIndex: Int? = nil
     @State private var showIndexLabels = false
+    @State private var showResetConfirmation = false
+    /// Set when the user confirms "Reset all" — the persistent store is only
+    /// cleared on Save, so backing out without saving keeps the old calibration.
+    @State private var pendingStoreClear = false
 
     private let order: [AnatomicalLandmark] = AnatomicalLandmark.calibrationOrder
 
@@ -60,8 +64,19 @@ struct CalibrationScreen: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") { saveAndDismiss() }
-                    .disabled(picked.isEmpty)
+                    .disabled(picked.isEmpty && !pendingStoreClear)
             }
+        }
+        .background(Theme.canvas)
+        .confirmationDialog(
+            "Reset all calibrated landmarks?",
+            isPresented: $showResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset all", role: .destructive) { resetAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Clears every picked landmark in this session. The saved calibration on this device is only removed when you tap Save.")
         }
         .onAppear {
             picked = LandmarkCalibrationStore.shared.calibrated()
@@ -80,21 +95,26 @@ struct CalibrationScreen: View {
         VStack(spacing: 6) {
             HStack {
                 Text("\(picked.count) of \(order.count) calibrated")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(Type.caption.monospacedDigit())
+                    .foregroundStyle(Theme.inkDim)
                 Spacer()
-                Button("Reset all") { resetAll() }
-                    .font(.caption)
+                Button("Reset all") { showResetConfirmation = true }
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.negative)
                     .disabled(picked.isEmpty)
             }
             ProgressView(value: Double(picked.count), total: Double(order.count))
+                .tint(Theme.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .background(Theme.canvas)
     }
 
     // MARK: - Viewer controls (preset + reset)
 
+    // Mesh-viewport overlay: white-on-black is deliberate (spotlight viewer),
+    // but sizes come from the Type scale.
     private var viewerControls: some View {
         HStack(spacing: 6) {
             ForEach(FaceViewPreset.allCases) { preset in
@@ -102,7 +122,7 @@ struct CalibrationScreen: View {
                     meshController.setPreset(preset)
                 } label: {
                     Text(preset.label)
-                        .font(.caption.weight(.semibold))
+                        .font(Type.captionStrong)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                 }
@@ -114,17 +134,18 @@ struct CalibrationScreen: View {
                 showIndexLabels.toggle()
             } label: {
                 Image(systemName: "textformat.123")
-                    .font(.caption.weight(.semibold))
+                    .font(Type.captionStrong)
                     .padding(8)
             }
-            .background(.ultraThinMaterial, in: Circle())
-            .foregroundStyle(showIndexLabels ? Color.cyan : .white)
+            .background(showIndexLabels ? AnyShapeStyle(Color.white) : AnyShapeStyle(.ultraThinMaterial),
+                        in: Circle())
+            .foregroundStyle(showIndexLabels ? Theme.ink : .white)
             .accessibilityLabel(showIndexLabels ? "Hide vertex indices" : "Show vertex indices")
             Button {
                 meshController.reset()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
-                    .font(.caption.weight(.semibold))
+                    .font(Type.captionStrong)
                     .padding(8)
             }
             .background(.ultraThinMaterial, in: Circle())
@@ -139,41 +160,43 @@ struct CalibrationScreen: View {
         VStack(spacing: 8) {
             if let lm = current {
                 Text("Tap \(lm.displayLabel)")
-                    .font(.headline)
+                    .font(Type.body.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
                 Text(lm.calibrationHint)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Type.callout)
+                    .foregroundStyle(Theme.inkDim)
                     .multilineTextAlignment(.center)
                 if let idx = picked[lm] {
                     Text("Picked vertex \(idx)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.green)
+                        .font(Type.caption.monospacedDigit())
+                        .foregroundStyle(Theme.positive)
                 }
-                HStack {
+                HStack(spacing: 8) {
                     Button("Undo") { undo() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.ghost)
                         .disabled(stepIndex == 0 && picked[lm] == nil)
                     Button("Skip") { skip() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.ghost)
                     Button(picked[lm] == nil ? "" : "Next") { advance() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.primary)
                         .disabled(picked[lm] == nil)
                         .opacity(picked[lm] == nil ? 0 : 1)
                 }
             } else {
                 Text("All landmarks calibrated.")
-                    .font(.headline)
+                    .font(Type.body.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
                 Text("Tap Save to apply, or use Reset all to start over.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Type.callout)
+                    .foregroundStyle(Theme.inkDim)
                     .multilineTextAlignment(.center)
                 Button("Save & finish") { saveAndDismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.primary)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
+        .background(Theme.surfaceRaised)
     }
 
     // MARK: - Actions
@@ -215,14 +238,19 @@ struct CalibrationScreen: View {
         }
     }
 
+    /// Clears the in-session picks only. The persistent store is cleared on Save
+    /// (`pendingStoreClear`) so backing out without saving changes nothing.
     private func resetAll() {
         picked.removeAll()
         stepIndex = 0
         lastTappedIndex = nil
-        LandmarkCalibrationStore.shared.clear()
+        pendingStoreClear = true
     }
 
     private func saveAndDismiss() {
+        if pendingStoreClear {
+            LandmarkCalibrationStore.shared.clear()
+        }
         LandmarkCalibrationStore.shared.merge(picked)
         onCommitted?()
         dismiss()

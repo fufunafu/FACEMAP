@@ -18,20 +18,10 @@ export const ink = {
 } as const;
 
 /**
- * Brand hues — also used as the 4 quadrants of the FaceMap logo mark.
- * The website's conceptual framework is the 5-facet FAS™; these hues are
- * mapped onto FAS facets in `content/fas.ts` (with peach added as the 5th).
+ * FAS facet hues — the 5 hues used across the site, the logo mark, and the
+ * iOS Aesthetic Wheel. SOURCE OF TRUTH for facet colour.
+ * Keep in sync with the `domain*` hues in FaceMap/UI/DesignSystem/Theme.swift.
  */
-export const domainHues = {
-  mechanical: "#C9BBEE",
-  optical: "#7A8094",
-  opticalFill: "#3F4456",
-  symmetry: "#E9B5E0",
-  structural: "#A6B4DD",
-  expression: "#F2C9A1",
-} as const;
-
-/** FAS facet hues — public name for the 5 hues used across the site. */
 export const facetHues = {
   skinQuality: "#C9BBEE",
   facialShape: "#A6B4DD",
@@ -40,7 +30,10 @@ export const facetHues = {
   expression: "#F2C9A1",
 } as const;
 
-/** Severity → opacity ramp on the domain hue. Mirrors Theme.swift:62-86. */
+/** Darker slate used when Proportions' hue is a fill background (Theme.domainProportionsFill). */
+export const proportionsFill = "#3F4456";
+
+/** Severity → opacity ramp on the facet hue. Mirrors `MetricResult.Severity.ringOpacity` in Theme.swift. */
 export const severityOpacity = {
   normal: 0,
   mild: 0.38,
