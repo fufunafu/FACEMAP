@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Side-by-side comparison of two visits for the same patient. The left column always
 /// shows the older visit (Visit A); the right shows the newer (Visit B). A delta table
@@ -11,9 +12,32 @@ struct ComparisonScreen: View {
     @StateObject private var meshA = FaceMeshController()
     @StateObject private var meshB = FaceMeshController()
     @State private var syncRotation = true
+    @State private var regionChange: RegionChangeState = .loading
+
+    @State private var pdfShareItem: PDFShareItem?
+    @State private var cleanupItem: PDFShareItem?
+    @State private var isExporting = false
+    @State private var exportErrorMessage: String?
+    @State private var showingExportError = false
+
+    // Inline status colours for visit-over-visit change. Worsened must read heavier
+    // than improved; facet/domain hues must never carry status meaning.
+    // TODO: Theme.statusWorsened / Theme.statusImproved tokens.
+    private static let worsenedInk = Color(hex: 0x9B3B2E)   // desaturated brick
+    private static let improvedInk = Color(hex: 0x3E7C4F)   // desaturated green
 
     private var resultsA: [MetricResult] { visitA.metricResults }
     private var resultsB: [MetricResult] { visitB.metricResults }
+
+    private enum RegionChangeState {
+        case loading
+        case computed([RegionProjectionDelta])
+        case incompatible
+    }
+
+    private var isFullyCalibrated: Bool {
+        LandmarkCalibrationStore.shared.calibratedCount >= AnatomicalLandmark.allCases.count
+    }
 
     var body: some View {
         ZStack {
@@ -21,19 +45,35 @@ struct ComparisonScreen: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if !isFullyCalibrated {
+                        calibrationBanner
+                    }
                     headerCard
                     meshRow
                     wheelRow
+                    regionChangeSection
                     deltaSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+            }
+
+            if isExporting {
+                exportOverlay
             }
         }
         .navigationTitle("Compare")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { exportComparisonPDF() } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .foregroundStyle(Theme.ink)
+                .disabled(isExporting)
+                .accessibilityLabel("Export comparison report")
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Toggle(isOn: $syncRotation) {
                     Image(systemName: syncRotation ? "lock.fill" : "lock.open")
@@ -43,6 +83,47 @@ struct ComparisonScreen: View {
                 .accessibilityLabel("Sync mesh rotation")
             }
         }
+        .sheet(item: $pdfShareItem, onDismiss: {
+            // Delete the transient export whether the share sheet completed or
+            // the practitioner swiped it away.
+            cleanupItem?.cleanup()
+            cleanupItem = nil
+        }) { item in
+            ShareSheet(items: [item.url]) {
+                pdfShareItem = nil
+            }
+        }
+        .alert("Export failed", isPresented: $showingExportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportErrorMessage ?? "The comparison report could not be generated.")
+        }
+        .task {
+            let deltas = RegionProjectionChange.compute(
+                from: visitA.capturedFace, to: visitB.capturedFace
+            )
+            regionChange = deltas.map { .computed($0) } ?? .incompatible
+        }
+    }
+
+    // MARK: - Calibration banner
+
+    /// Region tracking depends on calibrated landmark indices; warn when incomplete.
+    /// TODO: Theme.warning token — amber mirrors the PDF calibration strip
+    /// (0xB45309 ink on 0xFEF3C7).
+    private var calibrationBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 13))
+                .foregroundStyle(Color(hex: 0xB45309))
+            Text("Landmark calibration incomplete — region tracking uses default vertex indices. Calibrate landmarks from a saved case for reliable comparisons.")
+                .font(Type.caption)
+                .foregroundStyle(Color(hex: 0xB45309))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Color(hex: 0xFEF3C7))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
     }
 
     // MARK: - Header
@@ -111,10 +192,15 @@ struct ComparisonScreen: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Shown on a side with no readable capture — the row never hides one-sided.
     private var placeholderMesh: some View {
         ZStack {
             Theme.surface
-            Text("Mesh unreadable").font(Type.caption).foregroundStyle(Theme.inkMuted)
+            Text("No capture recorded for this visit")
+                .font(Type.caption)
+                .foregroundStyle(Theme.inkMuted)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 12)
         }
         .frame(height: 200)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
@@ -137,6 +223,94 @@ struct ComparisonScreen: View {
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
         }
+    }
+
+    // MARK: - Region projection change
+
+    private var regionChangeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("REGION PROJECTION CHANGE").sectionHeaderStyle()
+            switch regionChange {
+            case .loading:
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Comparing captures…")
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkMuted)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+            case .incompatible:
+                incompatibleCard
+            case .computed(let deltas):
+                regionChangeTable(deltas)
+            }
+        }
+    }
+
+    /// Explicit failure card — comparison must never silently hide.
+    private var incompatibleCard: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "exclamationmark.circle")
+                .font(.system(size: 15))
+                .foregroundStyle(Theme.inkDim)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("These two captures cannot be compared")
+                    .font(Type.captionStrong)
+                    .foregroundStyle(Theme.ink)
+                Text("A mesh is missing for one visit, or the two meshes have mismatched topology. Region tracking needs two readable captures of the same mesh layout.")
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.inkDim)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+    }
+
+    private func regionChangeTable(_ deltas: [RegionProjectionDelta]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 4) {
+                ForEach(deltas) { d in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(d.region.displayName)
+                            .font(Type.caption)
+                            .foregroundStyle(Theme.ink)
+                        Spacer()
+                        Text(regionDeltaLabel(d))
+                            .font(Type.caption.monospacedDigit())
+                            .fontWeight(regionDeltaWeight(d))
+                            .foregroundStyle(regionDeltaInk(d))
+                    }
+                }
+            }
+            Text("Mean regional Z-projection change. Changes within ±0.3 mm are at the capture noise floor and should not be over-read.")
+                .font(Type.caption)
+                .foregroundStyle(Theme.inkMuted)
+        }
+        .padding(12)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+    }
+
+    private func regionDeltaLabel(_ d: RegionProjectionDelta) -> String {
+        let mm = d.deltaMeters * 1000
+        let value = String(format: "%@%.1f mm", mm < 0 ? "−" : "+", abs(mm))
+        if d.isWithinNoiseFloor { return "\(value) · within noise" }
+        return mm < 0 ? "\(value) · projection lost" : "\(value) · projection gained"
+    }
+
+    private func regionDeltaInk(_ d: RegionProjectionDelta) -> Color {
+        if d.isWithinNoiseFloor { return Theme.inkMuted }
+        return d.deltaMeters < 0 ? Self.worsenedInk : Self.improvedInk
+    }
+
+    private func regionDeltaWeight(_ d: RegionProjectionDelta) -> Font.Weight {
+        // Lost projection (worsened) reads heavier than gained.
+        (!d.isWithinNoiseFloor && d.deltaMeters < 0) ? .semibold : .regular
     }
 
     // MARK: - Delta table
@@ -186,14 +360,15 @@ struct ComparisonScreen: View {
     }
 
     private func deltaRow(_ d: Delta) -> some View {
-        let aImproved = d.severityB.ringIndex < d.severityA.ringIndex
-        let aWorsened = d.severityB.ringIndex > d.severityA.ringIndex
+        let improved = d.severityB.ringIndex < d.severityA.ringIndex
+        let worsened = d.severityB.ringIndex > d.severityA.ringIndex
+        // Status colour only — facet hue stays on the DomainBadge for identity.
         let arrow: String
-        let arrowColor: Color
-        switch (aImproved, aWorsened) {
-        case (true, _):  arrow = "arrow.down.right";  arrowColor = Theme.ink
-        case (_, true):  arrow = "arrow.up.right";    arrowColor = d.domain.hue
-        default:         arrow = "arrow.right";       arrowColor = Theme.inkMuted
+        let statusInk: Color
+        switch (improved, worsened) {
+        case (true, _):  arrow = "arrow.down.right"; statusInk = Self.improvedInk
+        case (_, true):  arrow = "arrow.up.right";   statusInk = Self.worsenedInk
+        default:         arrow = "arrow.right";      statusInk = Theme.inkMuted
         }
 
         return HStack(spacing: 12) {
@@ -208,18 +383,19 @@ struct ComparisonScreen: View {
                     DomainBadge(domain: d.domain)
                 }
                 HStack(spacing: 6) {
-                    Text(formatValue(d.valueA, id: d.metricId))
+                    Text(MetricValueFormatter.short(d.valueA, metricId: d.metricId))
                         .font(Type.caption.monospacedDigit())
                         .foregroundStyle(Theme.inkDim)
                     Image(systemName: arrow).font(.system(size: 11))
-                        .foregroundStyle(arrowColor)
-                    Text(formatValue(d.valueB, id: d.metricId))
+                        .foregroundStyle(statusInk)
+                    Text(MetricValueFormatter.short(d.valueB, metricId: d.metricId))
                         .font(Type.caption.monospacedDigit())
                         .foregroundStyle(Theme.ink)
                     Spacer()
-                    Text(severityChangeLabel(d))
-                        .font(Type.caption)
-                        .foregroundStyle(Theme.inkMuted)
+                    // Worsened reads heavier (semibold brick) than improved (regular green).
+                    Text(statusLabel(d, improved: improved, worsened: worsened))
+                        .font(worsened ? Type.captionStrong : Type.caption)
+                        .foregroundStyle(statusInk)
                 }
             }
         }
@@ -228,18 +404,76 @@ struct ComparisonScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
     }
 
-    private func formatValue(_ v: Double, id: String) -> String {
-        if v.isNaN { return "—" }
-        switch id {
-        case CanthalTiltMetric.id: return String(format: "%.1f°", v)
-        case AsymmetryMetric.id:   return String(format: "%.1f mm", v * 1000)
-        default:                   return String(format: "%.1f%%", v * 100)
+    private func statusLabel(_ d: Delta, improved: Bool, worsened: Bool) -> String {
+        let a = d.severityA.rawValue.capitalized
+        let b = d.severityB.rawValue.capitalized
+        if worsened { return "Worsened · \(a) → \(b)" }
+        if improved { return "Improved · \(a) → \(b)" }
+        return a
+    }
+
+    // MARK: - Export
+
+    private var exportOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.15).ignoresSafeArea()
+            ProgressView("Preparing report…")
+                .font(Type.caption)
+                .tint(Theme.ink)
+                .foregroundStyle(Theme.ink)
+                .padding(20)
+                .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
         }
     }
 
-    private func severityChangeLabel(_ d: Delta) -> String {
-        let a = d.severityA.rawValue.capitalized
-        let b = d.severityB.rawValue.capitalized
-        return a == b ? a : "\(a) → \(b)"
+    private func exportComparisonPDF() {
+        guard !isExporting else { return }
+        isExporting = true
+        Task { @MainActor in
+            defer { isExporting = false }
+            await Task.yield()   // let the progress overlay paint first
+
+            let snapA = renderMeshSnapshot(for: visitA, results: resultsA)
+            let snapB = renderMeshSnapshot(for: visitB, results: resultsB)
+            guard let data = ComparisonReportPDF.generate(
+                patient: patient,
+                visitA: visitA,
+                visitB: visitB,
+                snapshotA: snapA,
+                snapshotB: snapB
+            ) else {
+                exportErrorMessage = "The comparison report could not be rendered."
+                showingExportError = true
+                return
+            }
+
+            let stampA = ISO8601DateFormatter().string(from: visitA.createdAt).prefix(10)
+            let stampB = ISO8601DateFormatter().string(from: visitB.createdAt).prefix(10)
+            let name = "FaceMap_\(patient.code)_Compare_\(stampA)_to_\(stampB)"
+            do {
+                let item = try PDFShareItem.create(data, suggestedName: name)
+                cleanupItem = item
+                pdfShareItem = item
+            } catch {
+                exportErrorMessage = error.localizedDescription
+                showingExportError = true
+            }
+        }
+    }
+
+    @MainActor
+    private func renderMeshSnapshot(for visit: PatientCase,
+                                    results: [MetricResult]) -> UIImage? {
+        guard let face = visit.capturedFace else { return nil }
+        let view = FaceMeshOverlay(
+            face: face,
+            regionSeverity: results.flaggedRegionsBySeverity,
+            regionDomain: results.regionDomainsByWorstSeverity,
+            controller: FaceMeshController()
+        )
+        .frame(width: 600, height: 400)
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        return renderer.uiImage
     }
 }
