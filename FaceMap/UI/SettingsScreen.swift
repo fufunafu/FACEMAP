@@ -5,6 +5,7 @@ import LocalAuthentication
 /// the on-disk case store; they tune the analysis presentation only.
 struct SettingsScreen: View {
     @AppStorage("biometricLockEnabled") private var biometricLock = false
+    @AppStorage("practitionerName") private var practitionerName = ""
     @AppStorage("targetThirdsToleranceBP") private var thirdsTolerance: Double = 0.05
     @AppStorage("targetFifthsToleranceBP") private var fifthsTolerance: Double = 0.10
     @AppStorage("targetGoldenToleranceBP") private var goldenTolerance: Double = 0.10
@@ -19,6 +20,18 @@ struct SettingsScreen: View {
             Theme.canvas.ignoresSafeArea()
             Form {
                 Section {
+                    TextField("Practitioner name & credentials", text: $practitionerName)
+                        .font(Type.body)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Practitioner").sectionHeaderStyle()
+                } footer: {
+                    Text("Appears on exported reports.")
+                        .font(Type.caption)
+                }
+
+                Section {
                     Toggle("Lock with Face ID", isOn: Binding(
                         get: { biometricLock },
                         set: { setBiometricLock($0) }
@@ -31,7 +44,7 @@ struct SettingsScreen: View {
                 } header: {
                     Text("Privacy").sectionHeaderStyle()
                 } footer: {
-                    Text("Off by default. When on, FaceMap re-authenticates with Face ID before opening saved cases.")
+                    Text("Off by default. When on, FaceMap requires Face ID or your device passcode at launch and whenever the app returns from the background, before any saved cases are shown.")
                         .font(Type.caption)
                 }
 
@@ -81,7 +94,7 @@ struct SettingsScreen: View {
                 Section {
                     Toggle("Cloud sync", isOn: .constant(false))
                         .disabled(true)
-                    Text("Coming in Phase 2 — Sign in with Apple, Vercel-hosted backend, opt-in only.")
+                    Text("Planned — Phase 5 — Sign in with Apple, Vercel-hosted backend, opt-in only.")
                         .font(Type.caption)
                         .foregroundStyle(Theme.inkMuted)
                 } header: {
