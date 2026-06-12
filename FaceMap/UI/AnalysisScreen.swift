@@ -5,7 +5,8 @@ import SwiftData
 /// - Header card (`SummaryHeader`) with thumbnail mesh, label/date, and `WheelGlyph`
 /// - One `CategoryRow` per non-empty `FaceDomain`; tap pushes `DomainDetailScreen`
 /// - Notes / Annotation pins entry rows present sheets
-/// - Toolbar (calibrate, annotations, export PDF, save) preserved verbatim
+/// - Toolbar: visit actions (export PDF, move to patient) for saved cases,
+///   calibrate, and Save for unsaved captures
 struct AnalysisScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var store: CaseStore
@@ -16,35 +17,62 @@ struct AnalysisScreen: View {
     let multiPose: MultiPoseCapture
     /// When opened from a stored case, edits go back to that case.
     var existingCase: PatientCase? = nil
+    /// Patient this capture session was started for (threaded from
+    /// `PatientDetailScreen` → `CaptureScreen`). When present, the save sheet
+    /// pre-fills and locks the patient so the visit lands in their timeline.
+    var patient: Patient? = nil
 
     @State private var activePose: CapturePose = .frontal
 
     /// Currently-displayed face — driven by `activePose`. All downstream UI consumes this.
     private var face: CapturedFace { multiPose.face(for: activePose) }
 
-    init(multiPose: MultiPoseCapture, existingCase: PatientCase? = nil) {
+    init(multiPose: MultiPoseCapture, existingCase: PatientCase? = nil, patient: Patient? = nil) {
         self.multiPose = multiPose
         self.existingCase = existingCase
+        self.patient = patient
     }
 
     /// Convenience for legacy / single-pose callers (saved cases that only have a
     /// frontal capture). Wraps the single face in a `MultiPoseCapture`.
-    init(face: CapturedFace, existingCase: PatientCase? = nil) {
+    init(face: CapturedFace, existingCase: PatientCase? = nil, patient: Patient? = nil) {
         self.multiPose = MultiPoseCapture(frontal: face)
         self.existingCase = existingCase
+        self.patient = patient
     }
 
     @State private var results: [MetricResult] = []
-    @State private var saveLabel = ""
+    /// True while metrics are being (re)computed — drives the "Analyzing…"
+    /// placeholder on first run and dims stale findings on pose switches.
+    @State private var isEvaluating = false
     @State private var showingSaveSheet = false
     @State private var notes: String = ""
     @State private var notesLoaded = false
+    @State private var notesSaveTask: Task<Void, Never>?
     @State private var pins: [AnnotationPin] = []
     @State private var pinsLoaded = false
     @State private var showingAnnotations = false
     @State private var showingNotes = false
     @State private var showingFullscreenMesh = false
     @State private var pdfShareItem: PDFShareItem?
+    @State private var isExportingPDF = false
+    @State private var showingPDFError = false
+
+    // Save-sheet state
+    @State private var savePatientID: UUID?
+    @State private var saveNewPatientMode = false
+    @State private var saveNewPatientCode = ""
+    @State private var visitLabel = ""
+    @State private var showingSaveError = false
+
+    // Re-bind ("Move to patient…") state
+    @State private var showingMoveSheet = false
+
+    private let notesCharLimit = 20_000
+
+    /// A degenerate mesh (decode failure or far too few vertices) can't be analyzed
+    /// or meaningfully saved.
+    private var captureInvalid: Bool { face.vertexCount < 100 }
 
     private var regionSeverity: [FacialRegion: MetricResult.Severity] {
         results.flaggedRegionsBySeverity
@@ -108,6 +136,8 @@ struct AnalysisScreen: View {
                 }
                 .padding(.bottom, 16)
             }
+
+            if isExportingPDF { exportingOverlay }
         }
         .navigationTitle(existingCase?.label ?? "Analysis")
         .navigationBarTitleDisplayMode(.inline)
@@ -125,23 +155,32 @@ struct AnalysisScreen: View {
             AnnotationSheet(face: face, pins: $pins) {
                 if let c = existingCase {
                     c.updateAnnotations(pins)
-                    try? store.context.save()
+                    store.persist("save annotations")
                 }
             }
             .presentationDetents([.medium, .large])
         }
+        .sheet(isPresented: $showingMoveSheet) {
+            if let c = existingCase {
+                PatientPickerSheet(title: "Move to patient", currentPatient: c.patient) { target in
+                    store.reassign(c, to: target)
+                }
+                .environmentObject(store)
+            }
+        }
         .sheet(item: $pdfShareItem) { item in
             ShareSheet(items: [item.url])
+        }
+        .alert("Could not generate the PDF for this visit", isPresented: $showingPDFError) {
+            Button("OK", role: .cancel) {}
         }
         .onChange(of: activePose) { _, _ in
             // Re-evaluate metrics against the newly-selected pose so the findings list
             // and construction overlays reflect what's on screen.
-            results = MetricRegistry.defaultRegistry()
-                .evaluateAll(on: AnalyzableFace(face))
+            reevaluate()
         }
         .task {
-            results = MetricRegistry.defaultRegistry()
-                .evaluateAll(on: AnalyzableFace(face))
+            reevaluate()
             if !notesLoaded {
                 notes = existingCase?.notes ?? ""
                 notesLoaded = true
@@ -152,10 +191,31 @@ struct AnalysisScreen: View {
             }
         }
         .onChange(of: notes) { _, newValue in
-            if let c = existingCase {
-                c.notes = newValue
-                try? store.context.save()
+            if newValue.count > notesCharLimit {
+                notes = String(newValue.prefix(notesCharLimit))
+                return
             }
+            scheduleNotesSave()
+        }
+        .onDisappear { flushNotes() }
+    }
+
+    // MARK: - Metric evaluation
+
+    /// Recomputes the metric set for the active pose. Two-phase so the UI can show
+    /// the "Analyzing…" placeholder / dim stale findings while it runs.
+    private func reevaluate() {
+        guard !captureInvalid else {
+            results = []
+            isEvaluating = false
+            return
+        }
+        isEvaluating = true
+        let snapshot = face
+        DispatchQueue.main.async {
+            results = MetricRegistry.defaultRegistry()
+                .evaluateAll(on: AnalyzableFace(snapshot))
+            isEvaluating = false
         }
     }
 
@@ -187,7 +247,11 @@ struct AnalysisScreen: View {
 
     @ViewBuilder
     private var findingsSection: some View {
-        if !results.isEmpty {
+        if captureInvalid {
+            invalidCaptureCard
+        } else if results.isEmpty && isEvaluating {
+            analyzingCard
+        } else if !results.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 Text("FINDINGS BY DOMAIN")
                     .sectionHeaderStyle()
@@ -226,7 +290,44 @@ struct AnalysisScreen: View {
                         .padding(.top, 4)
                 }
             }
+            // Dim stale findings while a pose-switch recompute is in flight.
+            .opacity(isEvaluating ? 0.4 : 1)
+            .animation(.easeInOut(duration: 0.15), value: isEvaluating)
         }
+    }
+
+    private var analyzingCard: some View {
+        VStack(spacing: 10) {
+            ProgressView().tint(Theme.ink)
+            Text("Analyzing…")
+                .font(Type.body)
+                .foregroundStyle(Theme.inkDim)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+        .padding(.horizontal, 16)
+    }
+
+    private var invalidCaptureCard: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 24))
+                .foregroundStyle(Theme.inkDim)
+            Text("Capture invalid — please recapture")
+                .font(Type.body.weight(.medium))
+                .foregroundStyle(Theme.ink)
+            Text("The captured mesh has too few vertices to analyze or save.")
+                .font(Type.caption)
+                .foregroundStyle(Theme.inkMuted)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(Theme.surface)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+        .padding(.horizontal, 16)
     }
 
     private var unpopulatedFootnote: String {
@@ -238,7 +339,7 @@ struct AnalysisScreen: View {
         case 2: joined = "\(names[0]) and \(names[1])"
         default: joined = names.dropLast().joined(separator: ", ") + ", and " + names.last!
         }
-        return "\(joined) metrics arrive in v0.3."
+        return "No \(joined) metrics for this capture."
     }
 
     // MARK: - More (notes + pins entry rows)
@@ -315,24 +416,52 @@ struct AnalysisScreen: View {
         return trimmed
     }
 
+    // MARK: - Notes persistence (debounced)
+
+    /// Debounces the per-keystroke notes save; `flushNotes` runs on sheet dismiss
+    /// so nothing is lost if the user closes the sheet inside the debounce window.
+    private func scheduleNotesSave() {
+        guard existingCase != nil else { return }
+        notesSaveTask?.cancel()
+        notesSaveTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
+            flushNotes()
+        }
+    }
+
+    private func flushNotes() {
+        notesSaveTask?.cancel()
+        notesSaveTask = nil
+        guard let c = existingCase, (c.notes ?? "") != notes else { return }
+        c.notes = notes
+        store.persist("save notes")
+    }
+
     // MARK: - Toolbar
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if existingCase != nil {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { exportPDF() } label: {
-                    Image(systemName: "square.and.arrow.up")
+                Menu {
+                    Button { exportPDF() } label: {
+                        Label("Export plan", systemImage: "square.and.arrow.up")
+                    }
+                    Button { showingMoveSheet = true } label: {
+                        Label("Move to patient…", systemImage: "person.crop.circle.badge.checkmark")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
                 .foregroundStyle(Theme.ink)
-                .accessibilityLabel("Export plan")
+                .accessibilityLabel("Visit actions")
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
             NavigationLink {
                 CalibrationScreen(face: face) {
-                    results = MetricRegistry.defaultRegistry()
-                        .evaluateAll(on: AnalyzableFace(face))
+                    reevaluate()
                 }
             } label: {
                 Image(systemName: "scope")
@@ -342,50 +471,159 @@ struct AnalysisScreen: View {
         }
         if existingCase == nil {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Save") { showingSaveSheet = true }
+                Button("Save") { prepareSaveSheet() }
                     .foregroundStyle(Theme.ink)
+                    .disabled(captureInvalid)
             }
         }
     }
 
     // MARK: - Save sheet
 
+    private func prepareSaveSheet() {
+        savePatientID = patient?.id
+        saveNewPatientMode = false
+        saveNewPatientCode = ""
+        visitLabel = store.suggestedVisitLabel(for: patient)
+        showingSaveSheet = true
+    }
+
+    private var activePatients: [Patient] {
+        store.activePatients()
+    }
+
+    private var trimmedNewPatientCode: String {
+        saveNewPatientCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var newPatientCodeInUse: Bool {
+        store.isCodeInUse(trimmedNewPatientCode)
+    }
+
+    private var saveDisabled: Bool {
+        if captureInvalid { return true }
+        if saveNewPatientMode {
+            return trimmedNewPatientCode.isEmpty || newPatientCodeInUse
+        }
+        return false
+    }
+
     private var saveSheet: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Patient code (no PII)", text: $saveLabel)
+                    if let locked = patient {
+                        HStack {
+                            Text(locked.code)
+                                .foregroundStyle(Theme.ink)
+                            Spacer()
+                            Image(systemName: "lock")
+                                .foregroundStyle(Theme.inkMuted)
+                        }
+                    } else if saveNewPatientMode {
+                        TextField("New patient code", text: $saveNewPatientCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        if newPatientCodeInUse {
+                            Text("This code is already in use")
+                                .font(Type.caption)
+                                .foregroundStyle(warningAmber)
+                        }
+                        Button("Choose an existing patient instead") {
+                            saveNewPatientMode = false
+                            saveNewPatientCode = ""
+                        }
+                    } else {
+                        Picker("Patient", selection: $savePatientID) {
+                            Text("Unassigned").tag(UUID?.none)
+                            ForEach(activePatients, id: \.id) { p in
+                                Text(p.code).tag(UUID?.some(p.id))
+                            }
+                        }
+                        Button("New patient…") { saveNewPatientMode = true }
+                    }
+                } header: {
+                    Text("Patient")
                 } footer: {
-                    Text("Use a code such as \"P-014 Visit 2\". The label is stored verbatim on this device.")
+                    Text("Pseudonymous codes only (e.g. \"P-014\"). Unassigned visits can be moved to a patient later.")
+                }
+
+                Section {
+                    TextField("Visit label", text: $visitLabel)
+                } header: {
+                    Text("Visit label")
+                } footer: {
+                    Text("Optional — e.g. \"Visit 2 — pre-treatment\". Defaults to \"\(store.suggestedVisitLabel(for: selectedSavePatient))\".")
                 }
             }
-            .navigationTitle("Save case")
+            .navigationTitle("Save visit")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: savePatientID) { _, _ in
+                visitLabel = store.suggestedVisitLabel(for: selectedSavePatient)
+            }
+            .alert("Could not save this visit — try again", isPresented: $showingSaveError) {
+                Button("OK", role: .cancel) {}
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { showingSaveSheet = false }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        let label = saveLabel.trimmingCharacters(in: .whitespacesAndNewlines)
-                        guard !label.isEmpty else { return }
-                        // Frontal pose is the primary `capturedFace`; the obliques get
-                        // saved to dedicated fields so the case round-trips with all three.
-                        let pc = PatientCase(
-                            label: label,
-                            capturedFace: multiPose.frontal,
-                            metricResults: results,
-                            notes: notes,
-                            obliqueL: multiPose.obliqueL,
-                            obliqueR: multiPose.obliqueR
-                        )
-                        store.save(pc)
-                        showingSaveSheet = false
-                        dismiss()
-                    }
-                    .disabled(saveLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Save") { performSave() }
+                        .disabled(saveDisabled)
                 }
             }
+        }
+    }
+
+    // TODO: migrate to Theme.warning token
+    private let warningAmber = Color(hex: 0xC77D0A)
+
+    /// The patient currently selected in the save sheet (nil = Unassigned).
+    private var selectedSavePatient: Patient? {
+        if let bound = patient { return bound }
+        guard let id = savePatientID else { return nil }
+        return activePatients.first { $0.id == id }
+    }
+
+    private func performSave() {
+        guard !captureInvalid else { return }
+
+        let resolvedPatient: Patient?
+        if let bound = patient {
+            resolvedPatient = bound
+        } else if saveNewPatientMode {
+            guard !trimmedNewPatientCode.isEmpty, !newPatientCodeInUse else { return }
+            resolvedPatient = store.createPatient(code: trimmedNewPatientCode)
+        } else {
+            resolvedPatient = selectedSavePatient
+        }
+
+        let trimmedLabel = visitLabel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = trimmedLabel.isEmpty
+            ? store.suggestedVisitLabel(for: resolvedPatient)
+            : trimmedLabel
+
+        // Frontal pose is the primary `capturedFace`; the obliques get
+        // saved to dedicated fields so the case round-trips with all three.
+        let pc = PatientCase(
+            label: label,
+            capturedFace: multiPose.frontal,
+            metricResults: results,
+            patient: resolvedPatient,
+            notes: notes.isEmpty ? nil : notes,
+            obliqueL: multiPose.obliqueL,
+            obliqueR: multiPose.obliqueR
+        )
+        switch store.save(pc) {
+        case .success:
+            showingSaveSheet = false
+            dismiss()
+        case .failure:
+            // Keep the sheet open; the sheet-local alert is more specific than the
+            // store-wide one, so consume the published error.
+            store.lastSaveError = nil
+            showingSaveError = true
         }
     }
 
@@ -415,6 +653,11 @@ struct AnalysisScreen: View {
                         }
                         .background(Theme.surface)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+
+                        Text("\(notes.count) / \(notesCharLimit) characters")
+                            .font(Type.caption)
+                            .foregroundStyle(Theme.inkMuted)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                     .padding(16)
                 }
@@ -423,25 +666,61 @@ struct AnalysisScreen: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { showingNotes = false }
-                        .foregroundStyle(Theme.ink)
+                    Button("Done") {
+                        flushNotes()
+                        showingNotes = false
+                    }
+                    .foregroundStyle(Theme.ink)
                 }
             }
+            .onDisappear { flushNotes() }
         }
     }
 
     // MARK: - PDF export
 
+    private var exportingOverlay: some View {
+        ZStack {
+            Theme.canvas.opacity(0.55).ignoresSafeArea()
+            VStack(spacing: 12) {
+                ProgressView().scaleEffect(1.2).tint(Theme.ink)
+                Text("Preparing PDF…")
+                    .font(Type.body.weight(.medium))
+                    .foregroundStyle(Theme.ink)
+            }
+            .padding(28)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .transition(.opacity)
+    }
+
     @MainActor
     private func exportPDF() {
-        guard let c = existingCase, let p = c.patient else { return }
-        let snapshot = renderMeshSnapshot()
-        guard let data = TreatmentPlanPDF.generate(
-            patient: p, visit: c, meshSnapshot: snapshot
-        ) else { return }
-        let stamp = ISO8601DateFormatter().string(from: c.createdAt).prefix(10)
-        let name = "FaceMap_\(p.code)_\(c.label)_\(stamp)"
-        pdfShareItem = PDFShareItem.write(data, suggestedName: name)
+        guard let c = existingCase else { return }
+        guard let p = c.patient else {
+            showingPDFError = true
+            return
+        }
+        isExportingPDF = true
+        // Defer one runloop turn so the progress overlay has a chance to render
+        // before the (synchronous) renderer work starts.
+        DispatchQueue.main.async {
+            defer { isExportingPDF = false }
+            let snapshot = renderMeshSnapshot()
+            guard let data = TreatmentPlanPDF.generate(
+                patient: p, visit: c, meshSnapshot: snapshot
+            ) else {
+                showingPDFError = true
+                return
+            }
+            let stamp = ISO8601DateFormatter().string(from: c.createdAt).prefix(10)
+            let name = "FaceMap_\(p.code)_\(c.label)_\(stamp)"
+            guard let item = PDFShareItem.write(data, suggestedName: name) else {
+                showingPDFError = true
+                return
+            }
+            pdfShareItem = item
+        }
     }
 
     private func renderMeshSnapshot() -> UIImage? {
@@ -482,4 +761,92 @@ struct AnalysisScreen: View {
 
 extension FacialRegion: Identifiable {
     var id: String { rawValue }
+}
+
+// MARK: - Patient picker (re-bind)
+
+/// Patient chooser used by "Move to patient…" re-bind flows — from a saved case's
+/// toolbar here and from visit rows in `PatientDetailScreen`. Lists active patients
+/// and offers inline creation of a new one.
+struct PatientPickerSheet: View {
+    @EnvironmentObject var store: CaseStore
+    @Environment(\.dismiss) private var dismiss
+
+    let title: String
+    var currentPatient: Patient? = nil
+    let onSelect: (Patient) -> Void
+
+    @State private var creatingNew = false
+    @State private var newCode = ""
+
+    // TODO: migrate to Theme.warning token
+    private let warningAmber = Color(hex: 0xC77D0A)
+
+    private var trimmedNewCode: String {
+        newCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var newCodeInUse: Bool {
+        store.isCodeInUse(trimmedNewCode)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    ForEach(store.activePatients(), id: \.id) { p in
+                        Button {
+                            onSelect(p)
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Text(p.code)
+                                    .foregroundStyle(Theme.ink)
+                                Spacer()
+                                if p.id == currentPatient?.id {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(Theme.inkDim)
+                                }
+                            }
+                        }
+                        .disabled(p.id == currentPatient?.id)
+                    }
+                } header: {
+                    Text("Patients")
+                } footer: {
+                    Text("Pseudonymous codes only. No PII.")
+                }
+
+                Section {
+                    if creatingNew {
+                        TextField("New patient code", text: $newCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        if newCodeInUse {
+                            Text("This code is already in use")
+                                .font(Type.caption)
+                                .foregroundStyle(warningAmber)
+                        }
+                        Button("Create and move") {
+                            guard !trimmedNewCode.isEmpty, !newCodeInUse else { return }
+                            let p = store.createPatient(code: trimmedNewCode)
+                            onSelect(p)
+                            dismiss()
+                        }
+                        .disabled(trimmedNewCode.isEmpty || newCodeInUse)
+                    } else {
+                        Button("New patient…") { creatingNew = true }
+                    }
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
 }

@@ -8,12 +8,21 @@ import ARKit
 /// captured, the analysis screen opens with the full `MultiPoseCapture`.
 struct CaptureScreen: View {
     @EnvironmentObject var store: CaseStore
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// Patient this capture session belongs to. Threaded through to `AnalysisScreen`
+    /// so the save sheet pre-fills and locks the patient instead of dumping the case
+    /// into the Unassigned bucket. Nil for ad-hoc captures from the Capture tab.
+    var patient: Patient? = nil
 
     // AR session state
     @State private var captureRequested = false
     @State private var trackingState: FaceCaptureView.Coordinator.TrackingState = .noFace
     @State private var headPose: HeadPose?
     @State private var isCapturing = false
+    /// True while a snapshot triggered by the auto hold-to-capture path is in flight,
+    /// so the result can be re-verified against the yaw window when it lands.
+    @State private var autoCaptureInFlight = false
 
     // Multi-pose flow state
     @State private var currentPose: CapturePose = .frontal
@@ -32,6 +41,17 @@ struct CaptureScreen: View {
         guard let pose = headPose, trackingState == .tracking else { return false }
         return currentPose.contains(yawDegrees: pose.yawDegrees)
     }
+
+    /// States where the camera feed is unusable and the user needs an explanation.
+    private var sessionHasIssue: Bool {
+        switch trackingState {
+        case .permissionDenied, .sessionFailed, .interrupted: return true
+        case .unsupported, .noFace, .tracking:                return false
+        }
+    }
+
+    // TODO: migrate to Theme.warning token
+    private let warningAmber = Color(hex: 0xC77D0A)
 
     var body: some View {
         ZStack {
@@ -54,8 +74,15 @@ struct CaptureScreen: View {
             VStack {
                 progressBar
                 statusBanner
+                if !captures.isEmpty {
+                    startOverButton
+                }
                 Spacer()
-                instructions
+                if sessionHasIssue {
+                    sessionIssueCard
+                } else {
+                    instructions
+                }
                 captureControls
             }
             .padding()
@@ -67,7 +94,21 @@ struct CaptureScreen: View {
         .toolbarColorScheme(.light, for: .navigationBar)
         .navigationDestination(isPresented: $navigateToAnalysis) {
             if let multi = multiPoseResult {
-                AnalysisScreen(multiPose: multi)
+                AnalysisScreen(multiPose: multi, patient: patient)
+            }
+        }
+        .onAppear {
+            // The NavigationStack keeps this view alive after a completed session.
+            // Reset once the previous MultiPoseCapture was finalized so a new visit
+            // can never inherit poses captured for a different patient.
+            if multiPoseResult != nil { resetSession() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                poseInWindowSince = nil
+                isCapturing = false
+                autoCaptureInFlight = false
+                captureRequested = false
             }
         }
     }
@@ -75,13 +116,28 @@ struct CaptureScreen: View {
     // MARK: - Session callbacks
 
     private func handleSnapshot(_ face: CapturedFace) {
-        captures[currentPose] = face
+        let wasAuto = autoCaptureInFlight
+        autoCaptureInFlight = false
         isCapturing = false
         poseInWindowSince = nil
 
-        if let nextIdx = poseOrder.firstIndex(of: currentPose).map({ $0 + 1 }),
-           nextIdx < poseOrder.count {
-            currentPose = poseOrder[nextIdx]
+        if wasAuto {
+            // Re-verify the yaw window at snapshot time — the head may have left the
+            // window between the trigger and the (frame-buffered) snapshot landing.
+            guard let pose = headPose, currentPose.contains(yawDegrees: pose.yawDegrees) else {
+                return
+            }
+        }
+
+        captures[currentPose] = face
+        advanceOrFinish()
+    }
+
+    /// Moves to the first uncaptured pose, or finalizes the multi-pose capture.
+    /// "First uncaptured" (not "next in order") so per-pose retakes rejoin the flow.
+    private func advanceOrFinish() {
+        if let next = poseOrder.first(where: { captures[$0] == nil }) {
+            currentPose = next
         } else if let frontal = captures[.frontal] {
             multiPoseResult = MultiPoseCapture(
                 frontal: frontal,
@@ -92,11 +148,33 @@ struct CaptureScreen: View {
         }
     }
 
+    /// Clears every piece of per-session state. A stale `captures` dictionary would
+    /// otherwise mix poses from two different visits into one snapshot.
+    private func resetSession() {
+        captures.removeAll()
+        currentPose = .frontal
+        poseInWindowSince = nil
+        isCapturing = false
+        autoCaptureInFlight = false
+        captureRequested = false
+        multiPoseResult = nil
+    }
+
+    /// Discards a single completed pose and rejoins the coached flow at that pose.
+    private func retake(_ pose: CapturePose) {
+        guard captures[pose] != nil, !isCapturing else { return }
+        captures[pose] = nil
+        currentPose = pose
+        poseInWindowSince = nil
+    }
+
     private func handleTrackingState(_ state: FaceCaptureView.Coordinator.TrackingState) {
         trackingState = state
         if state != .tracking {
             headPose = nil
             poseInWindowSince = nil
+            isCapturing = false
+            autoCaptureInFlight = false
         }
     }
 
@@ -106,38 +184,64 @@ struct CaptureScreen: View {
             if poseInWindowSince == nil { poseInWindowSince = Date() }
             if !isCapturing, let since = poseInWindowSince,
                Date().timeIntervalSince(since) >= holdDuration {
-                triggerCapture()
+                triggerCapture(auto: true)
             }
         } else {
             poseInWindowSince = nil
         }
     }
 
-    private func triggerCapture() {
+    private func triggerCapture(auto: Bool = false) {
         guard trackingState == .tracking, !isCapturing else { return }
         isCapturing = true
+        autoCaptureInFlight = auto
         captureRequested = true
     }
 
-    // MARK: - Top: progress bar
+    // MARK: - Top: progress bar (tap a completed segment to retake that pose)
 
     private var progressBar: some View {
         HStack(spacing: 6) {
             ForEach(poseOrder) { pose in
                 let captured = captures[pose] != nil
                 let current = pose == currentPose && !captured
-                Capsule()
-                    .fill(captured ? Theme.ink : (current ? Theme.domainSymmetry.opacity(0.85) : Theme.inkMuted.opacity(0.3)))
-                    .frame(height: 4)
-                    .overlay(alignment: .center) {
-                        Text(pose.label)
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(captured || current ? Theme.canvas : Theme.inkMuted)
-                            .offset(y: 14)
-                    }
+                Button {
+                    retake(pose)
+                } label: {
+                    Capsule()
+                        .fill(captured ? Theme.ink : (current ? Theme.inkMuted : Theme.inkMuted.opacity(0.3)))
+                        .frame(height: 4)
+                        .overlay(alignment: .center) {
+                            Text(pose.label)
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(captured || current ? Theme.canvas : Theme.inkMuted)
+                                .offset(y: 14)
+                        }
+                        // Inset outward so the 4-pt capsule has a tappable retake target.
+                        .contentShape(Rectangle().inset(by: -14))
+                }
+                .buttonStyle(.plain)
+                .disabled(!captured)
+                .accessibilityLabel(captured ? "Retake \(pose.displayName)" : pose.displayName)
             }
         }
         .padding(.top, 8)
+    }
+
+    private var startOverButton: some View {
+        Button {
+            resetSession()
+        } label: {
+            Label("Start over", systemImage: "arrow.counterclockwise")
+                .font(Type.captionStrong)
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+        }
+        .padding(.top, 8)
+        .accessibilityLabel("Start over — discard captured poses")
     }
 
     // MARK: - Status banner
@@ -157,16 +261,20 @@ struct CaptureScreen: View {
 
     private var badgeColor: Color {
         switch trackingState {
-        case .unsupported: return Theme.domainSymmetry
-        case .noFace:      return Theme.inkDim
-        case .tracking:    return isPoseInWindow ? Theme.ink : Theme.inkDim
+        case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
+            return warningAmber
+        case .noFace:   return Theme.inkDim
+        case .tracking: return isPoseInWindow ? Theme.ink : Theme.inkDim
         }
     }
 
     private var badgeText: String {
         switch trackingState {
-        case .unsupported: return "TrueDepth not available on this device"
-        case .noFace:      return "Position your face in front of the camera"
+        case .unsupported:      return "TrueDepth not available on this device"
+        case .permissionDenied: return "Camera access is off"
+        case .sessionFailed:    return "Camera session failed"
+        case .interrupted:      return "Camera paused"
+        case .noFace:           return "Position your face in front of the camera"
         case .tracking:
             if isPoseInWindow { return "Hold — capturing…" }
             if let pose = headPose {
@@ -201,9 +309,71 @@ struct CaptureScreen: View {
 
     private var borderColor: Color {
         switch trackingState {
-        case .tracking:    return isPoseInWindow ? Theme.ink : Theme.ink.opacity(0.55)
-        case .noFace:      return Theme.ink.opacity(0.45)
-        case .unsupported: return .clear
+        case .tracking: return isPoseInWindow ? Theme.ink : Theme.ink.opacity(0.55)
+        case .noFace:   return Theme.ink.opacity(0.45)
+        case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
+            return .clear
+        }
+    }
+
+    // MARK: - Session-issue card (permission denied / failed / interrupted)
+
+    private var sessionIssueCard: some View {
+        VStack(spacing: 10) {
+            Image(systemName: sessionIssueIcon)
+                .font(.system(size: 28))
+                .foregroundStyle(warningAmber)
+            Text(sessionIssueHeadline)
+                .font(Type.body.weight(.medium))
+                .foregroundStyle(Theme.ink)
+                .multilineTextAlignment(.center)
+            Text(sessionIssueDetail)
+                .font(Type.caption)
+                .foregroundStyle(Theme.inkDim)
+                .multilineTextAlignment(.center)
+            if trackingState == .permissionDenied {
+                Button {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                } label: {
+                    Text("Open Settings")
+                }
+                .buttonStyle(.primary)
+                .padding(.top, 4)
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.hairline, lineWidth: 1))
+        .padding(.bottom, 8)
+    }
+
+    private var sessionIssueIcon: String {
+        switch trackingState {
+        case .permissionDenied: return "video.slash"
+        case .sessionFailed:    return "exclamationmark.triangle"
+        default:                return "pause.circle"
+        }
+    }
+
+    private var sessionIssueHeadline: String {
+        switch trackingState {
+        case .permissionDenied: return "Camera access is off"
+        case .sessionFailed:    return "The camera session failed"
+        default:                return "Camera paused"
+        }
+    }
+
+    private var sessionIssueDetail: String {
+        switch trackingState {
+        case .permissionDenied:
+            return "FaceMap needs the front TrueDepth camera to capture a face. Allow camera access in Settings, then return here."
+        case .sessionFailed:
+            return "Leave this screen and try again. If it keeps happening, restart the app."
+        default:
+            return "Capture will resume when the camera is available again."
         }
     }
 
@@ -229,16 +399,18 @@ struct CaptureScreen: View {
 
     private var headline: String {
         switch trackingState {
-        case .unsupported: return ""
-        case .noFace:      return "Position your face in the frame"
-        case .tracking:    return isPoseInWindow ? "Hold still…" : currentPose.coachPrompt
+        case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
+            return ""
+        case .noFace:   return "Position your face in the frame"
+        case .tracking: return isPoseInWindow ? "Hold still…" : currentPose.coachPrompt
         }
     }
 
     private var subhead: String {
         switch trackingState {
-        case .unsupported: return ""
-        case .noFace:      return "Hold the phone about an arm's length away at eye level."
+        case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
+            return ""
+        case .noFace:   return "Hold the phone about an arm's length away at eye level."
         case .tracking:
             if isPoseInWindow {
                 return "Capturing in under a second."
@@ -274,7 +446,7 @@ struct CaptureScreen: View {
                         .frame(width: 96, height: 96)
                 }
 
-                Button(action: triggerCapture) {
+                Button(action: { triggerCapture() }) {
                     Circle().fill(Theme.ink).frame(width: 78, height: 78)
                 }
                 .disabled(trackingState != .tracking || isCapturing)
@@ -290,6 +462,7 @@ struct CaptureScreen: View {
                 .background(.regularMaterial, in: Capsule())
         }
         .padding(.bottom, 8)
+        .opacity(sessionHasIssue ? 0 : 1)
     }
 
     private var buttonLabel: String {
