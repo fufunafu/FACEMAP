@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 
 /// Versioned schema scaffold for FaceMap.
@@ -36,13 +37,20 @@ enum FaceMapSchema {
 /// Migration plan — empty today (only one schema version), but exists so future
 /// migrations have an obvious place to land.
 enum FaceMapMigrationPlan: SchemaMigrationPlan {
+    /// A failed migration fetch/save must never be invisible — corrupt or
+    /// half-migrated stores are exactly what we need a forensic trail for.
+    /// Migration stages MUST log through this (do/catch, never `try?`).
+    static let logger = Logger(subsystem: "com.fuanne.facemap", category: "Migration")
+
     static var schemas: [any VersionedSchema.Type] { [SchemaV1.self] }
     static var stages: [MigrationStage] { [] }
 }
 
 /* -----------------------------------------------------------------------------
 
-EXAMPLE — adding a mandatory `Patient.consentVersion: Int` field:
+EXAMPLE — adding a mandatory `Patient.consentVersion: Int` field.
+Note the do/catch + logger: a failed migration fetch/save must not be silent
+(`try?` would hide a half-migrated store).
 
     enum SchemaV2: VersionedSchema {
         static var versionIdentifier: Schema.Version { Schema.Version(2, 0, 0) }
@@ -58,10 +66,15 @@ EXAMPLE — adding a mandatory `Patient.consentVersion: Int` field:
                     willMigrate: { context in
                         // Backfill consentVersion = 1 on every existing patient.
                         let request = FetchDescriptor<Patient>()
-                        for p in (try? context.fetch(request)) ?? [] {
-                            p.consentVersion = 1
+                        do {
+                            for p in try context.fetch(request) {
+                                p.consentVersion = 1
+                            }
+                            try context.save()
+                        } catch {
+                            logger.error("V1→V2 consentVersion backfill failed: \(String(describing: error), privacy: .public)")
+                            throw error   // abort the migration rather than ship a half-migrated store
                         }
-                        try? context.save()
                     },
                     didMigrate: nil
                 )

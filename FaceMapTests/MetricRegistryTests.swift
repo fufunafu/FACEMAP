@@ -66,3 +66,28 @@ final class MetricRegistryTests: XCTestCase {
         XCTAssertNotNil(agg[.forehead])
     }
 }
+
+// MARK: - Degenerate-input hardening
+
+/// A zero-vertex face (e.g. a record whose mesh blob was lost) must flow through the
+/// whole registry as per-metric "Unavailable" failure results — never a trap.
+final class MetricRegistryDegenerateInputTests: XCTestCase {
+    func test_evaluateAll_zeroVertexFace_returnsFailureResultForEveryMetric() {
+        let face = AnalyzableFace(vertices: [])
+        let registry = MetricRegistry.defaultRegistry()
+
+        let results = registry.evaluateAll(on: face)
+
+        XCTAssertEqual(results.count, registry.metrics.count,
+                       "every metric must still report (as a failure), none may trap or vanish")
+        for r in results {
+            XCTAssertTrue(r.value.isNaN, "\(r.metricId) should report NaN, got \(r.value)")
+            XCTAssertEqual(r.confidence, 0, "\(r.metricId) should report zero confidence")
+            XCTAssertTrue(r.notes?.hasPrefix("Unavailable") ?? false,
+                          "\(r.metricId) should carry an 'Unavailable' note, got \(r.notes ?? "nil")")
+            XCTAssertTrue(r.regions.isEmpty, "\(r.metricId) must not flag regions it couldn't measure")
+        }
+        // And the aggregations downstream of evaluateAll stay empty rather than trapping.
+        XCTAssertTrue(results.flaggedRegionsBySeverity.isEmpty)
+    }
+}
