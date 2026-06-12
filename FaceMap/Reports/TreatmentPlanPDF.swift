@@ -33,41 +33,26 @@ struct RegionProjectionDelta: Identifiable {
     var id: String { region.rawValue }
 
     /// Below this magnitude the change is within ARKit capture noise.
-    static let noiseFloorMeters: Double = 0.0003   // ±0.3 mm
+    static let noiseFloorMeters = SurfaceChangeAnalyzer.noiseFloorMeters
 
     var isWithinNoiseFloor: Bool { abs(deltaMeters) <= Self.noiseFloorMeters }
 }
 
-/// Computes per-region mean-Z projection change between two captures. ARKit's face
-/// mesh has fixed topology, so vertex N is the same anatomical point in both meshes;
-/// a vertex-count mismatch means the captures cannot be compared.
-///
-/// NOTE: when a dedicated `SurfaceChangeAnalyzer` lands, this helper should delegate
-/// to it — the contract here (nil = incompatible, [] never returned) must be kept.
+/// Thin adapter over `SurfaceChangeAnalyzer` (the canonical engine, which also
+/// cancels session-to-session anchor offset via bony landmarks). Keeps the report
+/// layer's contract: nil = incompatible captures, deltas ordered as
+/// `FacialRegion.allCases`, [] never returned.
 enum RegionProjectionChange {
 
     /// Returns one delta per region with known vertices, ordered as `FacialRegion.allCases`.
     /// Returns nil when either mesh is missing or the topologies don't match.
     static func compute(from older: CapturedFace?, to newer: CapturedFace?) -> [RegionProjectionDelta]? {
         guard let a = older, let b = newer else { return nil }
-        let va = a.vertices
-        let vb = b.vertices
-        guard !va.isEmpty, va.count == vb.count else { return nil }
-
-        var out: [RegionProjectionDelta] = []
-        for region in FacialRegion.allCases {
-            guard let indices = FaceLandmarkIndices.regionVertices[region],
-                  !indices.isEmpty else { continue }
-            var sumA: Float = 0, sumB: Float = 0
-            var count = 0
-            for i in indices where i >= 0 && i < va.count {
-                sumA += va[i].z
-                sumB += vb[i].z
-                count += 1
-            }
-            guard count > 0 else { continue }
-            let delta = Double((sumB - sumA) / Float(count))
-            out.append(RegionProjectionDelta(region: region, deltaMeters: delta))
+        let changes = SurfaceChangeAnalyzer.regionChanges(from: a, to: b)
+        guard !changes.isEmpty else { return nil }
+        let byRegion = Dictionary(uniqueKeysWithValues: changes.map { ($0.region, $0.deltaZMeters) })
+        let out = FacialRegion.allCases.compactMap { region in
+            byRegion[region].map { RegionProjectionDelta(region: region, deltaMeters: $0) }
         }
         return out.isEmpty ? nil : out
     }
@@ -374,10 +359,15 @@ struct TreatmentPlanPageOne: View {
             )
 
             PDFSectionHeader("CLINICAL CAPTURES")
+            // Clinical photos captured with each pose; the frontal slot falls back
+            // to the mesh snapshot for photo-less (pre-v0.6) records.
             PDFPhotoTriptych(slots: [
-                .init(caption: "Oblique L", image: nil),
-                .init(caption: "Frontal", image: meshSnapshot),
-                .init(caption: "Oblique R", image: nil),
+                .init(caption: "Oblique L",
+                      image: visit.photo(for: .obliqueL).flatMap(UIImage.init(data:))),
+                .init(caption: "Frontal",
+                      image: visit.photo(for: .frontal).flatMap(UIImage.init(data:)) ?? meshSnapshot),
+                .init(caption: "Oblique R",
+                      image: visit.photo(for: .obliqueR).flatMap(UIImage.init(data:))),
             ])
 
             HStack(alignment: .top, spacing: PDFTheme.gutter) {

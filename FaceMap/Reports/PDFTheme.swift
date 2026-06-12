@@ -74,10 +74,11 @@ enum MetricValueFormatter {
             return String(format: "%.1f mm", value * 1000)
         case FacialThirdsMetric.id, FacialFifthsMetric.id, GoldenRatioMetric.id:
             return String(format: "%.1f%%", value * 100)
+        case ExpressionAsymmetryMetric.id, SkinQualityAnalyzer.metricId:
+            return String(format: "%.2f", value)
         default:
-            // Unitless metrics (expression-asymmetry ratio, skin-quality texture
-            // index, and any future metric without a registered unit). Mirrors the
-            // AnalysisScreen default — never multiply an unknown unit by 100.
+            // Unitless metrics and any future metric without a registered unit.
+            // Mirrors the AnalysisScreen default — never multiply an unknown unit by 100.
             return String(format: "%.2f", value)
         }
     }
@@ -98,6 +99,12 @@ enum MetricValueFormatter {
         case FacialThirdsMetric.id, FacialFifthsMetric.id, GoldenRatioMetric.id:
             return String(format: "%.1f%% deviation (target ≤ %.0f%%)",
                           r.value * 100, r.target.upperBound * 100)
+        case ExpressionAsymmetryMetric.id:
+            return String(format: "worst pair Δ %.2f (target ≤ %.2f)",
+                          r.value, r.target.upperBound)
+        case SkinQualityAnalyzer.metricId:
+            return String(format: "texture %.3f (target ≤ %.3f)",
+                          r.value, r.target.upperBound)
         default:
             return String(format: "%.2f (target %.2f–%.2f)",
                           r.value, r.target.lowerBound, r.target.upperBound)
