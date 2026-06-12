@@ -35,7 +35,7 @@ targets:
           - front-facing-camera
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
-        NSCameraUsageDescription: FaceMap uses the front camera and TrueDepth sensor to construct a 3D face model for aesthetic analysis.
+        NSCameraUsageDescription: FaceMap uses the TrueDepth camera to capture a 3D face model and clinical reference photos for practitioner planning. Data stays on this device.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
     settings:
