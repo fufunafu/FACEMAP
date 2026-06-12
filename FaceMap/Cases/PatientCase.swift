@@ -1,10 +1,13 @@
 import Foundation
+import os
 import SwiftData
 
 /// One captured-and-analyzed face — a single visit. The label is free-text (e.g. "Visit 2")
 /// and pairs with a `Patient` for grouping. No PII fields are added.
 @Model
 final class PatientCase {
+    private static let logger = Logger(subsystem: "com.fuanne.facemap", category: "PatientCase")
+
     @Attribute(.unique) var id: UUID
     var label: String
     var createdAt: Date
@@ -53,17 +56,55 @@ final class PatientCase {
         self.label = label
         self.createdAt = createdAt
         self.patient = patient
-        self.capturedFaceJSON = (try? JSONEncoder().encode(capturedFace)) ?? Data()
-        self.metricResultsJSON = (try? JSONEncoder().encode(metricResults)) ?? Data()
+        self.capturedFaceJSON = Self.encodeOrEmpty(capturedFace, what: "frontal CapturedFace", caseID: id)
+        self.metricResultsJSON = Self.encodeOrEmpty(metricResults, what: "metric results", caseID: id)
         self.annotationsJSON = annotations.isEmpty
             ? nil
-            : (try? JSONEncoder().encode(annotations))
+            : Self.encodeOrNil(annotations, what: "annotations", caseID: id)
         self.notes = notes
-        self.obliqueLCapturedFaceJSON = obliqueL.flatMap { try? JSONEncoder().encode($0) }
-        self.obliqueRCapturedFaceJSON = obliqueR.flatMap { try? JSONEncoder().encode($0) }
+        self.obliqueLCapturedFaceJSON = obliqueL.flatMap {
+            Self.encodeOrNil($0, what: "oblique-L CapturedFace", caseID: id)
+        }
+        self.obliqueRCapturedFaceJSON = obliqueR.flatMap {
+            Self.encodeOrNil($0, what: "oblique-R CapturedFace", caseID: id)
+        }
         self.frontalPhotoJPEG = photos[.frontal]
         self.obliqueLPhotoJPEG = photos[.obliqueL]
         self.obliqueRPhotoJPEG = photos[.obliqueR]
+    }
+
+    // MARK: - Encode/decode seams (logged, never silent)
+
+    /// Encode, falling back to empty `Data` so the (non-optional) column can still be
+    /// written — but leave a forensic trail: an empty blob means this record's payload
+    /// was lost at save time, not corrupted later.
+    private static func encodeOrEmpty<T: Encodable>(_ value: T, what: String, caseID: UUID) -> Data {
+        do {
+            return try JSONEncoder().encode(value)
+        } catch {
+            logger.error("Failed to encode \(what, privacy: .public) for case \(caseID.uuidString, privacy: .public): \(String(describing: error), privacy: .public). Substituting empty Data — payload is lost.")
+            return Data()
+        }
+    }
+
+    private static func encodeOrNil<T: Encodable>(_ value: T, what: String, caseID: UUID) -> Data? {
+        do {
+            return try JSONEncoder().encode(value)
+        } catch {
+            logger.error("Failed to encode \(what, privacy: .public) for case \(caseID.uuidString, privacy: .public): \(String(describing: error), privacy: .public). Storing nil — payload is lost.")
+            return nil
+        }
+    }
+
+    /// Decode, logging (not swallowing) failures so corrupt records are visible in the
+    /// unified log. Returns nil so callers keep their existing "Mesh unreadable" paths.
+    private func decodeLogged<T: Decodable>(_ type: T.Type, from data: Data, what: String) -> T? {
+        do {
+            return try JSONDecoder().decode(type, from: data)
+        } catch {
+            Self.logger.error("Failed to decode \(what, privacy: .public) for case \(self.id.uuidString, privacy: .public) (\(data.count) bytes): \(String(describing: error), privacy: .public)")
+            return nil
+        }
     }
 
     /// Clinical photo for a pose, if one was stored.
@@ -85,17 +126,34 @@ final class PatientCase {
     }
 
     var capturedFace: CapturedFace? {
-        try? JSONDecoder().decode(CapturedFace.self, from: capturedFaceJSON)
+        decodeLogged(CapturedFace.self, from: capturedFaceJSON, what: "frontal CapturedFace")
     }
 
     var obliqueLCapturedFace: CapturedFace? {
         guard let data = obliqueLCapturedFaceJSON else { return nil }
-        return try? JSONDecoder().decode(CapturedFace.self, from: data)
+        return decodeLogged(CapturedFace.self, from: data, what: "oblique-L CapturedFace")
     }
 
     var obliqueRCapturedFace: CapturedFace? {
         guard let data = obliqueRCapturedFaceJSON else { return nil }
-        return try? JSONDecoder().decode(CapturedFace.self, from: data)
+        return decodeLogged(CapturedFace.self, from: data, what: "oblique-R CapturedFace")
+    }
+
+    /// True when at least one stored payload exists but no longer decodes — i.e. the
+    /// record is present but (partially) unreadable. Computed on demand from the same
+    /// decode paths the accessors use; the UI can adopt this to badge corrupt visits.
+    var isCorrupt: Bool {
+        if capturedFace == nil { return true }
+        if obliqueLCapturedFaceJSON != nil && obliqueLCapturedFace == nil { return true }
+        if obliqueRCapturedFaceJSON != nil && obliqueRCapturedFace == nil { return true }
+        if decodeLogged([MetricResult].self, from: metricResultsJSON, what: "metric results") == nil {
+            return true
+        }
+        if let data = annotationsJSON,
+           decodeLogged([AnnotationPin].self, from: data, what: "annotations") == nil {
+            return true
+        }
+        return false
     }
 
     /// Reassemble the original `MultiPoseCapture` from the three stored faces.
@@ -111,21 +169,21 @@ final class PatientCase {
     }
 
     var metricResults: [MetricResult] {
-        (try? JSONDecoder().decode([MetricResult].self, from: metricResultsJSON)) ?? []
+        decodeLogged([MetricResult].self, from: metricResultsJSON, what: "metric results") ?? []
     }
 
     var annotations: [AnnotationPin] {
         guard let data = annotationsJSON else { return [] }
-        return (try? JSONDecoder().decode([AnnotationPin].self, from: data)) ?? []
+        return decodeLogged([AnnotationPin].self, from: data, what: "annotations") ?? []
     }
 
     func updateMetricResults(_ results: [MetricResult]) {
-        self.metricResultsJSON = (try? JSONEncoder().encode(results)) ?? Data()
+        self.metricResultsJSON = Self.encodeOrEmpty(results, what: "metric results", caseID: id)
     }
 
     func updateAnnotations(_ pins: [AnnotationPin]) {
         self.annotationsJSON = pins.isEmpty
             ? nil
-            : (try? JSONEncoder().encode(pins))
+            : Self.encodeOrNil(pins, what: "annotations", caseID: id)
     }
 }

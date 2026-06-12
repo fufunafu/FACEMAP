@@ -217,6 +217,8 @@ struct FaceMeshOverlay: UIViewRepresentable {
         d.primitives = .triangles(face.triangleIndices.map { UInt32($0) })
         d.materials = .allFaces(0)
 
+        // intentionally silent: visual-only fallback — a failed mesh build just shows
+        // an empty viewport; indices were validated at decode time in CapturedFace.
         guard let resource = try? MeshResource.generate(from: [d]) else { return nil }
 
         let colors = vertexColors(vertexCount: centered.count)

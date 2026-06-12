@@ -36,6 +36,59 @@ struct CapturedFace: Codable, Hashable {
         self.timestamp = timestamp
     }
 
+    // MARK: - Codable
+
+    // Encoding stays synthesized-equivalent (same keys, same layout) so blobs written by
+    // older builds remain byte-compatible. Decoding is custom: the accessors below stride
+    // and index the raw arrays without bounds checks, so a structurally-valid-but-corrupt
+    // payload (truncated vertex buffer, short transform, out-of-range triangle index) must
+    // be rejected *here*, where failure flows into the existing nil → "Mesh unreadable"
+    // paths (`PatientCase.capturedFace` returns nil on decode failure).
+    private enum CodingKeys: String, CodingKey {
+        case vertexData, triangleIndices, transformData, blendShapes, timestamp
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let vertexData      = try c.decode([Float].self,           forKey: .vertexData)
+        let triangleIndices = try c.decode([Int16].self,           forKey: .triangleIndices)
+        let transformData   = try c.decode([Float].self,           forKey: .transformData)
+        let blendShapes     = try c.decode([String: Float].self,   forKey: .blendShapes)
+        let timestamp       = try c.decode(Date.self,              forKey: .timestamp)
+
+        guard vertexData.count % 3 == 0 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .vertexData, in: c,
+                debugDescription: "vertexData count \(vertexData.count) is not a multiple of 3"
+            )
+        }
+        guard transformData.count == 16 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .transformData, in: c,
+                debugDescription: "transformData count \(transformData.count) != 16"
+            )
+        }
+        guard triangleIndices.count % 3 == 0 else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .triangleIndices, in: c,
+                debugDescription: "triangleIndices count \(triangleIndices.count) is not a multiple of 3"
+            )
+        }
+        let vertexCount = vertexData.count / 3
+        guard triangleIndices.allSatisfy({ Int($0) >= 0 && Int($0) < vertexCount }) else {
+            throw DecodingError.dataCorruptedError(
+                forKey: .triangleIndices, in: c,
+                debugDescription: "triangleIndices contains an index outside 0..<\(vertexCount)"
+            )
+        }
+
+        self.vertexData = vertexData
+        self.triangleIndices = triangleIndices
+        self.transformData = transformData
+        self.blendShapes = blendShapes
+        self.timestamp = timestamp
+    }
+
     var vertices: [SIMD3<Float>] {
         var out: [SIMD3<Float>] = []
         out.reserveCapacity(vertexData.count / 3)

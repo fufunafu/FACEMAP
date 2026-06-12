@@ -148,7 +148,7 @@ struct CalibrationMeshView: UIViewRepresentable {
         let verts = coordinator.faceVertices
         let centroid = coordinator.centroid
 
-        for idx in pickedIndices where idx < verts.count {
+        for idx in pickedIndices where idx >= 0 && idx < verts.count {
             let isHighlighted = (idx == highlightedIndex)
             let pos = verts[idx] - centroid
             let radius: Float = isHighlighted ? 0.0035 : 0.0025
@@ -168,7 +168,7 @@ struct CalibrationMeshView: UIViewRepresentable {
     private func addIndexLabels(to markerAnchor: AnchorEntity,
                                 verts: [SIMD3<Float>],
                                 centroid: SIMD3<Float>) {
-        guard let center = indexLabelCenter, center < verts.count else { return }
+        guard let center = indexLabelCenter, center >= 0, center < verts.count else { return }
         let centerPos = verts[center]
         let nearest = verts.indices
             .map { (idx: $0, d: simd_distance_squared(verts[$0], centerPos)) }
@@ -222,6 +222,8 @@ struct CalibrationMeshView: UIViewRepresentable {
         d.primitives = .triangles(face.triangleIndices.map { UInt32($0) })
         d.materials = .allFaces(0)
 
+        // intentionally silent: visual-only fallback — a failed mesh build just shows
+        // an empty viewport; indices were validated at decode time in CapturedFace.
         guard let resource = try? MeshResource.generate(from: [d]) else { return nil }
 
         var material = PhysicallyBasedMaterial()

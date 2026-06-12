@@ -23,6 +23,10 @@ import Foundation
 // not clinically meaningful**. The disclaimer-gate copy reflects this.
 
 enum FaceLandmarkIndices {
+    /// Number of vertices in ARKit's face mesh topology. Calibration stores validate
+    /// persisted vertex indices against `0..<arkitVertexCount` on both read and write.
+    static let arkitVertexCount = 1220
+
     /// Calibrated overrides (from `LandmarkCalibrationStore`) merged over the placeholder
     /// defaults. Use this in metric and analysis code — it transparently picks up whatever
     /// the practitioner has calibrated without touching call sites.
@@ -32,6 +36,17 @@ enum FaceLandmarkIndices {
 
     /// Placeholder vertex indices used until the practitioner calibrates against their
     /// own captured mesh. PLACEHOLDER VALUES — see header comment.
+    ///
+    /// ⚠️ PROVENANCE — MediaPipe, NOT ARKit. These seeds (168 nasion, 133/362 medial
+    /// canthi, 33/263 lateral canthi, 234/454 zygions, …) are canonical **MediaPipe
+    /// FaceMesh** indices from its 468-vertex topology. ARKit's `ARFaceGeometry` is a
+    /// different 1,220-vertex topology, so the same number addresses an unrelated
+    /// point on the ARKit mesh. They are kept only as in-range placeholders so the
+    /// pipeline runs end-to-end; they are UNVERIFIED on ARKit topology. Until the
+    /// practitioner calibrates, metrics built on these indices measure essentially
+    /// arbitrary points — and `SurfaceChangeAnalyzer`'s stable-landmark offset
+    /// cancellation (nasion + canthi) anchors on equally arbitrary points, so
+    /// visit-over-visit projection numbers inherit the same caveat.
     static let defaultVertexIndex: [AnatomicalLandmark: Int] = [
         .trichion:       16,    // top of forehead, midline
         .glabella:       28,    // mid-brow, midline
@@ -67,6 +82,7 @@ enum FaceLandmarkIndices {
     /// Placeholder vertex-group mapping used until the practitioner paints regions
     /// against their own captured mesh. PLACEHOLDER — small ring around each region's
     /// central landmark. Empty groups are tolerated by the heatmap renderer.
+    /// Same MediaPipe-derived provenance caveat as `defaultVertexIndex` above.
     static let defaultRegionVertices: [FacialRegion: [Int]] = [
         .forehead:    [16, 28, 21, 54, 103, 67, 109],
         .templeL:     [251, 284],
