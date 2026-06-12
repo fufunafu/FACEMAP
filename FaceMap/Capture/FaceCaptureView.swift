@@ -1,15 +1,21 @@
 import SwiftUI
 import ARKit
+import CoreImage
 import RealityKit
+import UIKit
 
 /// SwiftUI host for an `ARView` configured for front-camera face tracking.
 /// The coordinator owns the AR session and emits `CapturedFace` snapshots.
 struct FaceCaptureView: UIViewRepresentable {
     final class Coordinator: NSObject, ARSessionDelegate {
         weak var arView: ARView?
-        let onSnapshot: (CapturedFace) -> Void
+        /// Snapshot callback: the averaged mesh plus a portrait-oriented JPEG of the
+        /// camera frame at capture time (nil if the frame couldn't be encoded).
+        let onSnapshot: (CapturedFace, Data?) -> Void
         let onTrackingState: (TrackingState) -> Void
         let onHeadPose: (HeadPose) -> Void
+
+        private static let ciContext = CIContext()
 
         /// Buffer of recent geometries used for frame averaging on capture.
         private var recentGeometries: [(vertices: [SIMD3<Float>], transform: simd_float4x4, blendShapes: [String: Float])] = []
@@ -18,7 +24,7 @@ struct FaceCaptureView: UIViewRepresentable {
         /// Set true by `updateUIView` when a capture is requested; honored on the next frame.
         var pendingSnapshot = false
 
-        init(onSnapshot: @escaping (CapturedFace) -> Void,
+        init(onSnapshot: @escaping (CapturedFace, Data?) -> Void,
              onTrackingState: @escaping (TrackingState) -> Void,
              onHeadPose: @escaping (HeadPose) -> Void) {
             self.onSnapshot = onSnapshot
@@ -75,11 +81,21 @@ struct FaceCaptureView: UIViewRepresentable {
                 blendShapes: last.blendShapes,
                 timestamp: Date()
             )
-            onSnapshot(face)
+            onSnapshot(face, currentFramePhotoJPEG())
+        }
+
+        /// JPEG of the camera frame at capture time, rotated to portrait. The raw
+        /// sensor image is unmirrored, which matches clinical-photography convention
+        /// (the patient as others see them) — do not mirror it to match the preview.
+        private func currentFramePhotoJPEG() -> Data? {
+            guard let pixelBuffer = arView?.session.currentFrame?.capturedImage else { return nil }
+            let ci = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
+            guard let cg = Self.ciContext.createCGImage(ci, from: ci.extent) else { return nil }
+            return UIImage(cgImage: cg).jpegData(compressionQuality: 0.85)
         }
     }
 
-    let onSnapshot: (CapturedFace) -> Void
+    let onSnapshot: (CapturedFace, Data?) -> Void
     let onTrackingState: (Coordinator.TrackingState) -> Void
     var onHeadPose: (HeadPose) -> Void = { _ in }
     @Binding var captureRequested: Bool

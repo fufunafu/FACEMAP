@@ -43,8 +43,11 @@ struct AnalysisScreen: View {
     @State private var pinsLoaded = false
     @State private var showingAnnotations = false
     @State private var showingNotes = false
+    @State private var showingPhotos = false
     @State private var showingFullscreenMesh = false
     @State private var pdfShareItem: PDFShareItem?
+    // Defaults to true so the banner doesn't flash before `.task` reads the store.
+    @State private var isCalibrated = true
 
     private var regionSeverity: [FacialRegion: MetricResult.Severity] {
         results.flaggedRegionsBySeverity
@@ -94,6 +97,16 @@ struct AnalysisScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
 
+                    if !isCalibrated {
+                        NavigationLink {
+                            CalibrationScreen(face: face) { refreshAfterCalibration() }
+                        } label: {
+                            CalibrationWarningBanner()
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.horizontal, 16)
+                    }
+
                     if multiPose.availablePoses.count > 1 {
                         posePicker
                             .padding(.horizontal, 16)
@@ -121,6 +134,7 @@ struct AnalysisScreen: View {
             )
         }
         .sheet(isPresented: $showingNotes) { notesSheet }
+        .sheet(isPresented: $showingPhotos) { photosSheet }
         .sheet(isPresented: $showingAnnotations) {
             AnnotationSheet(face: face, pins: $pins) {
                 if let c = existingCase {
@@ -136,12 +150,11 @@ struct AnalysisScreen: View {
         .onChange(of: activePose) { _, _ in
             // Re-evaluate metrics against the newly-selected pose so the findings list
             // and construction overlays reflect what's on screen.
-            results = MetricRegistry.defaultRegistry()
-                .evaluateAll(on: AnalyzableFace(face))
+            Task { await evaluateMetrics() }
         }
         .task {
-            results = MetricRegistry.defaultRegistry()
-                .evaluateAll(on: AnalyzableFace(face))
+            await evaluateMetrics()
+            isCalibrated = LandmarkCalibrationStore.shared.isFullyCalibrated
             if !notesLoaded {
                 notes = existingCase?.notes ?? ""
                 notesLoaded = true
@@ -267,8 +280,53 @@ struct AnalysisScreen: View {
                     )
                 }
                 .buttonStyle(.plain)
+
+                if !multiPose.photos.isEmpty {
+                    Button { showingPhotos = true } label: {
+                        moreRow(
+                            icon: "photo.on.rectangle",
+                            title: "Clinical photos",
+                            subtitle: "\(multiPose.photos.count) pose\(multiPose.photos.count == 1 ? "" : "s") captured"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
             }
             .padding(.horizontal, 16)
+        }
+    }
+
+    // MARK: - Photos sheet
+
+    private var photosSheet: some View {
+        NavigationStack {
+            TabView {
+                ForEach(CapturePose.allCases.filter { multiPose.photo(for: $0) != nil }) { pose in
+                    VStack(spacing: 12) {
+                        if let data = multiPose.photo(for: pose), let ui = UIImage(data: data) {
+                            Image(uiImage: ui)
+                                .resizable()
+                                .scaledToFit()
+                                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+                        }
+                        Text(pose.displayName)
+                            .font(Type.caption)
+                            .foregroundStyle(Theme.inkDim)
+                    }
+                    .padding(16)
+                }
+            }
+            .tabViewStyle(.page)
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .background(Theme.canvas)
+            .navigationTitle("Clinical photos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { showingPhotos = false }
+                        .foregroundStyle(Theme.ink)
+                }
+            }
         }
     }
 
@@ -330,10 +388,7 @@ struct AnalysisScreen: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             NavigationLink {
-                CalibrationScreen(face: face) {
-                    results = MetricRegistry.defaultRegistry()
-                        .evaluateAll(on: AnalyzableFace(face))
-                }
+                CalibrationScreen(face: face) { refreshAfterCalibration() }
             } label: {
                 Image(systemName: "scope")
                     .accessibilityLabel("Calibrate landmarks")
@@ -346,6 +401,24 @@ struct AnalysisScreen: View {
                     .foregroundStyle(Theme.ink)
             }
         }
+    }
+
+    private func refreshAfterCalibration() {
+        Task {
+            await evaluateMetrics()
+            isCalibrated = LandmarkCalibrationStore.shared.isFullyCalibrated
+        }
+    }
+
+    /// Mesh metrics from the registry, plus the photo-based skin-quality indicator
+    /// when this pose has a clinical photo.
+    private func evaluateMetrics() async {
+        var r = MetricRegistry.defaultRegistry().evaluateAll(on: AnalyzableFace(face))
+        if let jpeg = multiPose.photo(for: activePose),
+           let skin = await SkinQualityAnalyzer.evaluate(photoJPEG: jpeg) {
+            r.append(skin)
+        }
+        results = r
     }
 
     // MARK: - Save sheet
@@ -377,7 +450,8 @@ struct AnalysisScreen: View {
                             metricResults: results,
                             notes: notes,
                             obliqueL: multiPose.obliqueL,
-                            obliqueR: multiPose.obliqueR
+                            obliqueR: multiPose.obliqueR,
+                            photos: multiPose.photos
                         )
                         store.save(pc)
                         showingSaveSheet = false
@@ -474,6 +548,12 @@ struct AnalysisScreen: View {
         case SurfaceDisplacementMetric.id:
             return String(format: "worst Z-deficit %.1f mm (target ≤ %.1f mm)",
                           r.value * 1000, r.target.upperBound * 1000)
+        case ExpressionAsymmetryMetric.id:
+            return String(format: "worst pair Δ %.2f (target ≤ %.2f)",
+                          r.value, r.target.upperBound)
+        case SkinQualityAnalyzer.metricId:
+            return String(format: "texture %.3f (target ≤ %.3f)",
+                          r.value, r.target.upperBound)
         default:
             return String(format: "%.3f", r.value)
         }

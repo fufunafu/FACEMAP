@@ -32,6 +32,12 @@ final class PatientCase {
     /// Oblique-right capture (patient turned to their left).
     @Attribute(.externalStorage) var obliqueRCapturedFaceJSON: Data?
 
+    /// Clinical photos (portrait JPEG) captured alongside each mesh pose. All optional —
+    /// pre-photo records and mesh-only captures continue to load via lightweight migration.
+    @Attribute(.externalStorage) var frontalPhotoJPEG: Data?
+    @Attribute(.externalStorage) var obliqueLPhotoJPEG: Data?
+    @Attribute(.externalStorage) var obliqueRPhotoJPEG: Data?
+
     init(id: UUID = UUID(),
          label: String,
          createdAt: Date = Date(),
@@ -41,7 +47,8 @@ final class PatientCase {
          notes: String? = nil,
          annotations: [AnnotationPin] = [],
          obliqueL: CapturedFace? = nil,
-         obliqueR: CapturedFace? = nil) {
+         obliqueR: CapturedFace? = nil,
+         photos: [CapturePose: Data] = [:]) {
         self.id = id
         self.label = label
         self.createdAt = createdAt
@@ -54,6 +61,27 @@ final class PatientCase {
         self.notes = notes
         self.obliqueLCapturedFaceJSON = obliqueL.flatMap { try? JSONEncoder().encode($0) }
         self.obliqueRCapturedFaceJSON = obliqueR.flatMap { try? JSONEncoder().encode($0) }
+        self.frontalPhotoJPEG = photos[.frontal]
+        self.obliqueLPhotoJPEG = photos[.obliqueL]
+        self.obliqueRPhotoJPEG = photos[.obliqueR]
+    }
+
+    /// Clinical photo for a pose, if one was stored.
+    func photo(for pose: CapturePose) -> Data? {
+        switch pose {
+        case .frontal:  return frontalPhotoJPEG
+        case .obliqueL: return obliqueLPhotoJPEG
+        case .obliqueR: return obliqueRPhotoJPEG
+        }
+    }
+
+    /// All stored photos keyed by pose.
+    var photosByPose: [CapturePose: Data] {
+        var out: [CapturePose: Data] = [:]
+        out[.frontal] = frontalPhotoJPEG
+        out[.obliqueL] = obliqueLPhotoJPEG
+        out[.obliqueR] = obliqueRPhotoJPEG
+        return out
     }
 
     var capturedFace: CapturedFace? {
@@ -77,7 +105,8 @@ final class PatientCase {
         return MultiPoseCapture(
             frontal: frontal,
             obliqueL: obliqueLCapturedFace,
-            obliqueR: obliqueRCapturedFace
+            obliqueR: obliqueRCapturedFace,
+            photos: photosByPose
         )
     }
 

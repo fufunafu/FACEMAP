@@ -23,6 +23,7 @@ struct MetricRegistry {
             CanthalTiltMetric(),
             AsymmetryMetric(),
             SurfaceDisplacementMetric(),
+            ExpressionAsymmetryMetric(),
         ])
     }
 }

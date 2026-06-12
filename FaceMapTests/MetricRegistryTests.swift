@@ -12,7 +12,20 @@ final class MetricRegistryTests: XCTestCase {
         XCTAssertTrue(ids.contains(CanthalTiltMetric.id))
         XCTAssertTrue(ids.contains(AsymmetryMetric.id))
         XCTAssertTrue(ids.contains(SurfaceDisplacementMetric.id))
-        XCTAssertEqual(ids.count, 6)
+        XCTAssertTrue(ids.contains(ExpressionAsymmetryMetric.id))
+        XCTAssertEqual(ids.count, 7)
+    }
+
+    /// FAS facet assignments per FaceDomain.swift: proportions = thirds/fifths/golden
+    /// ratio, symmetry = asymmetry + canthal tilt, facial shape = surface displacement.
+    func test_metricDomainAssignments_matchFASFacets() {
+        XCTAssertEqual(FacialThirdsMetric.domain, .proportions)
+        XCTAssertEqual(FacialFifthsMetric.domain, .proportions)
+        XCTAssertEqual(GoldenRatioMetric.domain, .proportions)
+        XCTAssertEqual(CanthalTiltMetric.domain, .symmetry)
+        XCTAssertEqual(AsymmetryMetric.domain, .symmetry)
+        XCTAssertEqual(SurfaceDisplacementMetric.domain, .facialShape)
+        XCTAssertEqual(ExpressionAsymmetryMetric.domain, .expression)
     }
 
     func test_evaluateAll_returnsOneResultPerMetric() {
@@ -38,7 +51,7 @@ final class MetricRegistryTests: XCTestCase {
             .alarBaseL:     SIMD3( 0.018, -0.08, 0),
         ])
         let results = MetricRegistry.defaultRegistry().evaluateAll(on: face)
-        XCTAssertEqual(results.count, 6)
+        XCTAssertEqual(results.count, 7)
     }
 
     func test_flaggedRegionsAggregation() {

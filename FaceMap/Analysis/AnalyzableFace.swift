@@ -14,12 +14,12 @@ struct AnalyzableFace {
     }
 
     /// Construct directly from a vertex array. Used by tests with synthetic fixtures.
-    init(vertices: [SIMD3<Float>]) {
+    init(vertices: [SIMD3<Float>], blendShapes: [String: Float] = [:]) {
         self.captured = CapturedFace(
             vertices: vertices,
             triangleIndices: [],
             transform: matrix_identity_float4x4,
-            blendShapes: [:],
+            blendShapes: blendShapes,
             timestamp: Date()
         )
         self.verts = vertices

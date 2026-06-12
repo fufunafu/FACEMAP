@@ -18,6 +18,7 @@ struct CaptureScreen: View {
     // Multi-pose flow state
     @State private var currentPose: CapturePose = .frontal
     @State private var captures: [CapturePose: CapturedFace] = [:]
+    @State private var photos: [CapturePose: Data] = [:]
     @State private var poseInWindowSince: Date?
     @State private var multiPoseResult: MultiPoseCapture?
     @State private var navigateToAnalysis = false
@@ -74,8 +75,9 @@ struct CaptureScreen: View {
 
     // MARK: - Session callbacks
 
-    private func handleSnapshot(_ face: CapturedFace) {
+    private func handleSnapshot(_ face: CapturedFace, photoJPEG: Data?) {
         captures[currentPose] = face
+        photos[currentPose] = photoJPEG
         isCapturing = false
         poseInWindowSince = nil
 
@@ -86,7 +88,8 @@ struct CaptureScreen: View {
             multiPoseResult = MultiPoseCapture(
                 frontal: frontal,
                 obliqueL: captures[.obliqueL],
-                obliqueR: captures[.obliqueR]
+                obliqueR: captures[.obliqueR],
+                photos: photos
             )
             navigateToAnalysis = true
         }

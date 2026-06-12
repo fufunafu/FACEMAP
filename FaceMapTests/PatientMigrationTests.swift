@@ -30,6 +30,38 @@ final class PatientMigrationTests: XCTestCase {
         )
     }
 
+    func test_photos_roundTripThroughPersistence() throws {
+        let ctx = try makeContext()
+        let face = CapturedFace(
+            vertices: [SIMD3<Float>(0, 0, 0)],
+            triangleIndices: [],
+            transform: matrix_identity_float4x4,
+            blendShapes: [:],
+            timestamp: Date()
+        )
+        let frontalJPEG = Data([0xFF, 0xD8, 0x01])
+        let obliqueLJPEG = Data([0xFF, 0xD8, 0x02])
+        let pc = PatientCase(
+            label: "photos",
+            capturedFace: face,
+            metricResults: [],
+            photos: [.frontal: frontalJPEG, .obliqueL: obliqueLJPEG]
+        )
+        ctx.insert(pc)
+        try ctx.save()
+
+        let fetched = try XCTUnwrap(
+            try ctx.fetch(FetchDescriptor<PatientCase>(
+                predicate: #Predicate { $0.label == "photos" }
+            )).first
+        )
+        XCTAssertEqual(fetched.photo(for: .frontal), frontalJPEG)
+        XCTAssertEqual(fetched.photo(for: .obliqueL), obliqueLJPEG)
+        XCTAssertNil(fetched.photo(for: .obliqueR))
+        XCTAssertEqual(fetched.multiPoseCapture?.photos.count, 2)
+        XCTAssertEqual(fetched.multiPoseCapture?.photo(for: .frontal), frontalJPEG)
+    }
+
     func test_bootstrap_rebindsOrphansToUnassignedPatient() throws {
         let ctx = try makeContext()
 
