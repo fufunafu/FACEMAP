@@ -21,24 +21,32 @@ struct AnalysisScreen: View {
     /// `PatientDetailScreen` → `CaptureScreen`). When present, the save sheet
     /// pre-fills and locks the patient so the visit lands in their timeline.
     var patient: Patient? = nil
+    /// Fired after a successful save so the presenting `CaptureScreen` knows the
+    /// session is persisted and may reset — a plain back-swipe must NOT discard
+    /// an unsaved three-pose session.
+    var onSaved: (() -> Void)? = nil
 
     @State private var activePose: CapturePose = .frontal
 
     /// Currently-displayed face — driven by `activePose`. All downstream UI consumes this.
     private var face: CapturedFace { multiPose.face(for: activePose) }
 
-    init(multiPose: MultiPoseCapture, existingCase: PatientCase? = nil, patient: Patient? = nil) {
+    init(multiPose: MultiPoseCapture, existingCase: PatientCase? = nil,
+         patient: Patient? = nil, onSaved: (() -> Void)? = nil) {
         self.multiPose = multiPose
         self.existingCase = existingCase
         self.patient = patient
+        self.onSaved = onSaved
     }
 
     /// Convenience for legacy / single-pose callers (saved cases that only have a
     /// frontal capture). Wraps the single face in a `MultiPoseCapture`.
-    init(face: CapturedFace, existingCase: PatientCase? = nil, patient: Patient? = nil) {
+    init(face: CapturedFace, existingCase: PatientCase? = nil,
+         patient: Patient? = nil, onSaved: (() -> Void)? = nil) {
         self.multiPose = MultiPoseCapture(frontal: face)
         self.existingCase = existingCase
         self.patient = patient
+        self.onSaved = onSaved
     }
 
     @State private var results: [MetricResult] = []
@@ -76,6 +84,10 @@ struct AnalysisScreen: View {
     /// A degenerate mesh (decode failure or far too few vertices) can't be analyzed
     /// or meaningfully saved.
     private var captureInvalid: Bool { face.vertexCount < 100 }
+
+    /// Save-gating checks the FRONTAL mesh (what gets persisted as the case's
+    /// primary capture), not whichever pose happens to be on screen.
+    private var saveInvalid: Bool { multiPose.frontal.vertexCount < 100 }
 
     private var regionSeverity: [FacialRegion: MetricResult.Severity] {
         results.flaggedRegionsBySeverity
@@ -538,7 +550,7 @@ struct AnalysisScreen: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") { prepareSaveSheet() }
                     .foregroundStyle(Theme.ink)
-                    .disabled(captureInvalid)
+                    .disabled(saveInvalid)
             }
         }
     }
@@ -566,7 +578,7 @@ struct AnalysisScreen: View {
     }
 
     private var saveDisabled: Bool {
-        if captureInvalid { return true }
+        if saveInvalid || isEvaluating { return true }
         if saveNewPatientMode {
             return trimmedNewPatientCode.isEmpty || newPatientCodeInUse
         }
@@ -652,14 +664,19 @@ struct AnalysisScreen: View {
     }
 
     private func performSave() {
-        guard !captureInvalid else { return }
+        guard !saveInvalid, !isEvaluating else { return }
 
         let resolvedPatient: Patient?
+        // Tracked so a failed CASE save can undo the patient we just created —
+        // otherwise the orphan blocks retrying with the same code ("already in use").
+        var createdPatient: Patient? = nil
         if let bound = patient {
             resolvedPatient = bound
         } else if saveNewPatientMode {
             guard !trimmedNewPatientCode.isEmpty, !newPatientCodeInUse else { return }
-            resolvedPatient = store.createPatient(code: trimmedNewPatientCode)
+            let p = store.createPatient(code: trimmedNewPatientCode)
+            createdPatient = p
+            resolvedPatient = p
         } else {
             resolvedPatient = selectedSavePatient
         }
@@ -669,12 +686,25 @@ struct AnalysisScreen: View {
             ? store.suggestedVisitLabel(for: resolvedPatient)
             : trimmedLabel
 
+        // Persist canonical FRONTAL-pose results regardless of which pose is on
+        // screen — downstream consumers (wheel glyphs, trend rows, severity dots)
+        // treat the stored results as the visit's frontal findings. The on-screen
+        // `results` may belong to an oblique pose. The recompute omits the photo
+        // skin indicator only when the user saves from an oblique pose.
+        let frontalResults: [MetricResult]
+        if activePose == .frontal {
+            frontalResults = results
+        } else {
+            frontalResults = MetricRegistry.defaultRegistry()
+                .evaluateAll(on: AnalyzableFace(multiPose.frontal))
+        }
+
         // Frontal pose is the primary `capturedFace`; the obliques get
         // saved to dedicated fields so the case round-trips with all three.
         let pc = PatientCase(
             label: label,
             capturedFace: multiPose.frontal,
-            metricResults: results,
+            metricResults: frontalResults,
             patient: resolvedPatient,
             notes: notes.isEmpty ? nil : notes,
             obliqueL: multiPose.obliqueL,
@@ -683,11 +713,19 @@ struct AnalysisScreen: View {
         )
         switch store.save(pc) {
         case .success:
+            // A patient-create hiccup earlier in this flow shouldn't fire the global
+            // alert over a visit that did save.
+            store.lastSaveError = nil
+            onSaved?()
             showingSaveSheet = false
             dismiss()
         case .failure:
             // Keep the sheet open; the sheet-local alert is more specific than the
-            // store-wide one, so consume the published error.
+            // store-wide one, so consume the published error. Undo the patient we
+            // created for this attempt so retrying the same code isn't blocked.
+            if let created = createdPatient {
+                store.deletePatient(created)
+            }
             store.lastSaveError = nil
             showingSaveError = true
         }

@@ -31,6 +31,8 @@ struct CaptureScreen: View {
     @State private var poseInWindowSince: Date?
     @State private var multiPoseResult: MultiPoseCapture?
     @State private var navigateToAnalysis = false
+    /// Set by AnalysisScreen's onSaved callback; gates the onAppear session reset.
+    @State private var sessionSaved = false
 
     /// Auto-capture fires after the pose has been held in-window for this long.
     private let holdDuration: TimeInterval = 0.6
@@ -95,14 +97,21 @@ struct CaptureScreen: View {
         .toolbarColorScheme(.light, for: .navigationBar)
         .navigationDestination(isPresented: $navigateToAnalysis) {
             if let multi = multiPoseResult {
-                AnalysisScreen(multiPose: multi, patient: patient)
+                AnalysisScreen(multiPose: multi, patient: patient) {
+                    sessionSaved = true
+                }
             }
         }
         .onAppear {
             // The NavigationStack keeps this view alive after a completed session.
-            // Reset once the previous MultiPoseCapture was finalized so a new visit
-            // can never inherit poses captured for a different patient.
-            if multiPoseResult != nil { resetSession() }
+            // Reset only once the session was actually SAVED — a plain back-swipe
+            // from an unsaved AnalysisScreen must not destroy three captured poses.
+            // The unsaved session stays resumable (and restartable via Start over),
+            // and a fresh visit can never inherit poses from a saved one.
+            if sessionSaved {
+                resetSession()
+                sessionSaved = false
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active {
@@ -234,19 +243,37 @@ struct CaptureScreen: View {
     }
 
     private var startOverButton: some View {
-        Button {
-            resetSession()
-        } label: {
-            Label("Start over", systemImage: "arrow.counterclockwise")
-                .font(Type.captionStrong)
-                .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(.regularMaterial, in: Capsule())
-                .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+        HStack(spacing: 8) {
+            Button {
+                resetSession()
+            } label: {
+                Label("Start over", systemImage: "arrow.counterclockwise")
+                    .font(Type.captionStrong)
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+            }
+            .accessibilityLabel("Start over — discard captured poses")
+
+            // An unsaved completed session (user backed out of Analysis) can be
+            // re-entered without recapturing all three poses.
+            if multiPoseResult != nil, !navigateToAnalysis {
+                Button {
+                    navigateToAnalysis = true
+                } label: {
+                    Label("Resume analysis", systemImage: "arrow.right.circle")
+                        .font(Type.captionStrong)
+                        .foregroundStyle(Theme.canvas)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Theme.ink, in: Capsule())
+                }
+                .accessibilityLabel("Resume analysis of the captured session")
+            }
         }
         .padding(.top, 8)
-        .accessibilityLabel("Start over — discard captured poses")
     }
 
     // MARK: - Status banner
