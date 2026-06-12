@@ -22,15 +22,15 @@ const FAQ = [
   },
   {
     q: "What does FaceMap actually measure?",
-    a: "v0.1 implements five geometric metrics — facial thirds, fifths, golden ratio, canthal tilt, and surface asymmetry — that quantify the Proportions and Symmetry facets of the FAS™. The other three facets (Skin quality, Facial shape, Expression) are graded by direct practitioner observation.",
+    a: "Eight metrics across all five FAS™ facets. Proportions (thirds, fifths, golden ratio), Symmetry (bilateral asymmetry, canthal tilt), and Facial shape (surface displacement) are measured on the 3D mesh; Expression from resting muscle-activation asymmetry; Skin quality from a provisional photo-based texture indicator. The same surface measurement also tracks objective volume change between visits.",
   },
   {
     q: "Do you support Android?",
     a: "Not currently. FaceMap relies on the iPhone’s TrueDepth front camera for high-fidelity 3D capture.",
   },
   {
-    q: "Will the other facets be quantified?",
-    a: "They are on the roadmap. The FAS™ is published in full; v0.1 of the app implements measurement for Proportions and Symmetry. The radar visualisation already reflects all five facets.",
+    q: "How accurate are the measurements?",
+    a: "Geometric outputs are only as good as the landmark calibration on each device — the app ships with reference vertex indices that must be calibrated against a real captured mesh before clinical use, and shows a standing warning until that is done. The skin-quality indicator is provisional and best read longitudinally. FaceMap is a planning aid, not a diagnostic device; the practitioner remains the clinical decision-maker.",
   },
 ];
 

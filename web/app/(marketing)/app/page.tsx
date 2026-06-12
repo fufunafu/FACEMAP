@@ -21,39 +21,39 @@ const SCREENSHOTS = [
 export const metadata: Metadata = {
   title: "The app",
   description:
-    "What FaceMap does on iPhone — capture a 3D mesh, run geometric metrics that quantify the Proportions and Symmetry facets of the FAS, and render the radar on-device.",
+    "What FaceMap does on iPhone — capture a 3D TrueDepth mesh and clinical photos, quantify all five FAS facets with eight metrics, and measure objective volume change visit-over-visit. On-device, for licensed practitioners.",
 };
 
 const FEATURES = [
   {
-    title: "TrueDepth capture",
+    title: "TrueDepth 3D capture",
     body:
-      "Front-facing TrueDepth camera produces a high-fidelity 3D mesh on-device. No cloud upload. The capture screen guides framing and pose.",
+      "A coached three-pose capture (frontal + both obliques) builds a high-fidelity 3D mesh from the iPhone's TrueDepth camera — and saves a standardised clinical photo with each pose. All on-device, no cloud upload.",
   },
   {
-    title: "FAS radar on iPhone",
+    title: "All five FAS facets, quantified",
     body:
-      "Every capture grades the radar. Proportions and Symmetry are quantified geometrically; Skin quality, Facial shape, and Expression are graded by the practitioner inline.",
+      "Eight metrics grade the full radar automatically — Proportions, Symmetry, and Facial shape from mesh geometry, Expression from resting muscle activation, and Skin quality from a photo-based texture indicator.",
   },
   {
-    title: "Severity by opacity",
+    title: "Objective volume tracking",
     body:
-      "0 None · 1 Mild · 2 Moderate · 3 Severe. Severity is the opacity of the facet hue — outliers are obvious. No separate red·amber·green ramp.",
+      "Re-capture at the next visit and FaceMap measures the millimetre change in projection per region — “midface +0.8 mm since the filler visit.” Objective outcomes a 2D photo tool cannot produce.",
   },
   {
-    title: "Local case storage",
+    title: "Treatment-plan PDF",
     body:
-      "Save cases under non-PII patient codes (e.g. ‘P-014 Visit 2’). Track each FAS visit-over-visit to see the radar shrink toward the centre.",
+      "Export a multi-page report — clinical photos, the FAS radar, per-facet findings, and the visit-over-visit change table — under a non-PII patient code. The artifact the patient record keeps.",
   },
   {
-    title: "HIT-ready output",
+    title: "On-device & private",
     body:
-      "Every FAS profile maps to one or more HITs. The app surfaces which Holistic Individualised Treatment(s) the patient&apos;s outliers point to.",
+      "Cases live in encrypted-at-rest storage excluded from device backups, behind an optional Face ID lock. Pseudonymous patient codes only — no names, no PII, no telemetry.",
   },
   {
     title: "Practitioner-only gate",
     body:
-      "First-launch disclaimer requires the practitioner to confirm licensing and patient consent before any capture is allowed.",
+      "A first-launch disclaimer requires the practitioner to confirm licensing and patient consent before any capture. A standing banner flags results until landmarks are calibrated on the device.",
   },
 ];
 
@@ -66,10 +66,10 @@ export default function AppPage() {
             The app
           </p>
           <h1 className="mt-4 max-w-3xl font-display text-[2.25rem] tracking-tight sm:text-5xl md:text-6xl">
-            FaceMap is a digital FAS™.
+            Measure the face. Prove the result.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
-            FaceMap brings the Facial Assessment Scale to iPhone. Capture a 3D face mesh, grade five facets, plot the radar, and see which Holistic Individualised Treatment(s) address the priorities — all on-device. Built for licensed practitioners.
+            FaceMap brings the Facial Assessment Scale to iPhone as a measurement tool, not a scoring toy. Capture a 3D TrueDepth mesh, quantify all five FAS facets, plan the HIT — then re-capture and measure the objective volume change your treatment produced. On-device, for licensed practitioners.
           </p>
         </div>
       </section>
@@ -92,6 +92,66 @@ export default function AppPage() {
               </li>
             ))}
           </ul>
+        </div>
+      </section>
+
+      <section className="border-b hairline">
+        <div className="container-page py-14 md:py-20">
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-center">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
+                The difference
+              </p>
+              <h2 className="mt-3 font-display text-3xl tracking-tight md:text-4xl">
+                Objective outcomes, not attractiveness scores.
+              </h2>
+              <p className="mt-4 text-[var(--color-ink-dim)]">
+                Photo-based tools rate a face from a 2D image. FaceMap measures one. Because ARKit&apos;s mesh has fixed topology, the same anatomical point is tracked across visits — so re-capturing after treatment yields the millimetre change in projection per region, after aligning on bony landmarks that filler cannot move.
+              </p>
+              <p className="mt-3 text-[var(--color-ink-dim)]">
+                A 2D photo cannot produce that number. It is the evidence a practitioner shows the patient, and the record that documents the result.
+              </p>
+              <p className="mt-4 text-xs text-[var(--color-ink-muted)]">
+                Changes below the capture-noise floor are reported as no measurable change — an honest null is itself a useful result.
+              </p>
+            </div>
+            <div className="rounded-[var(--radius-sheet)] border hairline bg-[var(--color-surface)] p-7">
+              <p className="text-[11px] uppercase tracking-wider text-[var(--color-ink-muted)]">
+                Region projection change · Visit 1 → Visit 2
+              </p>
+              <ul className="mt-5 flex flex-col gap-px overflow-hidden rounded-[var(--radius-card)] bg-[var(--color-hairline)]">
+                {[
+                  { region: "Midface (L)", delta: "+0.8 mm", gained: true },
+                  { region: "Midface (R)", delta: "+0.7 mm", gained: true },
+                  { region: "Tear trough (L)", delta: "+0.4 mm", gained: true },
+                  { region: "Chin", delta: "+1.2 mm", gained: true },
+                  { region: "Jawline (L)", delta: "—", gained: false },
+                ].map((row) => (
+                  <li
+                    key={row.region}
+                    className="flex items-center justify-between gap-4 bg-[var(--color-surface)] px-4 py-3"
+                  >
+                    <span className="text-sm text-[var(--color-ink)]">
+                      {row.region}
+                    </span>
+                    <span
+                      className="num text-sm tracking-tight"
+                      style={{
+                        color: row.gained
+                          ? "var(--color-ink)"
+                          : "var(--color-ink-muted)",
+                      }}
+                    >
+                      {row.delta}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-[11px] text-[var(--color-ink-muted)]">
+                Illustrative figures. Magnitudes depend on on-device calibration.
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -148,13 +208,13 @@ export default function AppPage() {
         <div className="container-page py-14 md:py-20">
           <div className="flex flex-col gap-2">
             <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--color-ink-muted)]">
-              v0.1 metrics
+              The metrics
             </p>
             <h2 className="font-display text-3xl tracking-tight md:text-4xl">
-              Five geometric metrics — quantifying Proportions &amp; Symmetry.
+              Eight metrics across all five facets.
             </h2>
             <p className="mt-2 max-w-2xl text-[var(--color-ink-dim)]">
-              Proportions and Symmetry are quantified by geometry directly. The other three FAS facets — Skin quality, Facial shape, Expression — are graded by direct practitioner observation in v0.1.
+              Proportions, Symmetry, and Facial shape are measured from the 3D mesh; Expression from resting muscle activation; Skin quality from a provisional photo-based texture indicator. Every facet on the radar now carries an automatic signal.
             </p>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-2">

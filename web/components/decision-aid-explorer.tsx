@@ -300,11 +300,10 @@ function FacetPanel({ id, grade }: { id: FacetId; grade: number }) {
         </ul>
       </Section>
 
-      <Section label="v0.1 FaceMap metrics that quantify this facet">
+      <Section label="FaceMap metrics that quantify this facet">
         {linked.length === 0 ? (
           <p className="rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-sm text-[var(--color-ink-muted)]">
-            Graded by direct observation. v0.1 of the FaceMap app does not yet
-            quantify this facet — it is on the roadmap.
+            Supported by direct practitioner observation alongside the FAS radar.
           </p>
         ) : (
           <ul className="space-y-2">

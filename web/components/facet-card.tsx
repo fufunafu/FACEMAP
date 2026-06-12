@@ -67,15 +67,9 @@ export function FacetCard({
         </p>
       </div>
 
-      {!facet.quantifiedInV1 ? (
-        <p className="mt-5 rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-xs text-[var(--color-ink-muted)]">
-          Graded by direct observation in v0.1 of the FaceMap iOS app. Quantified metrics for this facet are on the roadmap.
-        </p>
-      ) : (
-        <p className="mt-5 rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-xs text-[var(--color-ink-dim)]">
-          Quantified in v0.1 by FaceMap&apos;s geometric metrics.
-        </p>
-      )}
+      <p className="mt-5 rounded-md border hairline bg-[var(--color-surface-raised)] p-3 text-xs text-[var(--color-ink-dim)]">
+        {facet.quantifiedNote}
+      </p>
     </article>
   );
 }

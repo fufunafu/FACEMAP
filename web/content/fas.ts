@@ -29,8 +29,11 @@ export interface Facet {
   axis: 0 | 1 | 2 | 3 | 4;
   /** Which HIT(s) most directly address this facet. */
   hits: string[];
-  /** Whether v0.1 of the FaceMap iOS app currently quantifies this facet. */
-  quantifiedInV1: boolean;
+  /** How the FaceMap iOS app currently derives a quantified signal for this facet.
+   *  All five facets now carry at least one automatic metric. */
+  quantification: "geometric" | "surface" | "expression" | "photo";
+  /** Practitioner-readable note on the metric(s) behind this facet's signal. */
+  quantifiedNote: string;
 }
 
 export const facets: Record<FacetId, Facet> = {
@@ -43,7 +46,9 @@ export const facets: Record<FacetId, Facet> = {
     hue: "#C9BBEE", // lavender
     axis: 0,
     hits: ["glow-on"],
-    quantifiedInV1: false,
+    quantification: "photo",
+    quantifiedNote:
+      "Photo-based skin texture & evenness indicator from the clinical capture. A provisional, longitudinal signal — best read visit-over-visit, not as an absolute score.",
   },
   facialShape: {
     id: "facialShape",
@@ -54,7 +59,9 @@ export const facets: Record<FacetId, Facet> = {
     hue: "#A6B4DD", // periwinkle
     axis: 1,
     hits: ["shape-up", "profile"],
-    quantifiedInV1: false,
+    quantification: "surface",
+    quantifiedNote:
+      "Surface displacement — mean anterior-projection deficit per region, in millimetres, against the contralateral side. The same measurement drives visit-over-visit volume tracking.",
   },
   proportions: {
     id: "proportions",
@@ -65,7 +72,9 @@ export const facets: Record<FacetId, Facet> = {
     hue: "#7A8094", // slate
     axis: 2,
     hits: ["profile", "shape-up"],
-    quantifiedInV1: true,
+    quantification: "geometric",
+    quantifiedNote:
+      "Three geometric metrics — facial thirds, fifths, and selected golden-ratio relationships — measured directly on the 3D mesh.",
   },
   symmetry: {
     id: "symmetry",
@@ -76,7 +85,9 @@ export const facets: Record<FacetId, Facet> = {
     hue: "#E9B5E0", // magenta-pink
     axis: 3,
     hits: ["profile"],
-    quantifiedInV1: true,
+    quantification: "geometric",
+    quantifiedNote:
+      "Bilateral surface asymmetry across the midsagittal plane, plus canthal tilt per side — measured on the 3D mesh, in millimetres and degrees.",
   },
   expression: {
     id: "expression",
@@ -87,7 +98,9 @@ export const facets: Record<FacetId, Facet> = {
     hue: "#F2C9A1", // warm peach
     axis: 4,
     hits: ["bright-eyes", "kiss-and-smile"],
-    quantifiedInV1: false,
+    quantification: "expression",
+    quantifiedNote:
+      "Resting expression asymmetry — left/right gap in neutral muscle activation across six paired regions, from the capture's blendshape coefficients.",
   },
 };
 

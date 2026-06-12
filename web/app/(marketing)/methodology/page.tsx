@@ -20,7 +20,7 @@ export default function MethodologyPage() {
             Geometry that supports the FAS.
           </h1>
           <p className="mt-5 max-w-2xl text-[var(--color-ink-dim)]">
-            Each v0.1 metric runs after every capture, computes a value against a target range, and emits a severity grade aligned with the FAS 0–3 scale. Three metrics support the Proportions facet; two support Symmetry.
+            Each metric runs after every capture, computes a value against a target range, and emits a severity grade aligned with the FAS 0–3 scale. Eight metrics span all five facets — three for Proportions, two for Symmetry, one each for Facial shape, Expression, and Skin quality.
           </p>
         </div>
       </section>
@@ -135,7 +135,10 @@ export default function MethodologyPage() {
           </h2>
           <ul className="mt-6 max-w-3xl space-y-3 text-[var(--color-ink-dim)]">
             <li>
-              FaceMap analyses geometry only. Skin quality, Facial shape (volumetric), and Expression are not yet quantified by the v0.1 app and are graded by direct observation.
+              Quantification depth varies by facet. Proportions, Symmetry, and Facial shape are measured directly on the mesh; Expression is inferred from resting blendshape activation; Skin quality is a <em>provisional</em> photo-based texture indicator best read longitudinally, not as an absolute score.
+            </li>
+            <li>
+              Every geometric output depends on landmark calibration. The shipped vertex indices are reference seeds that must be calibrated against a real captured mesh on each device before clinical use; the app shows a standing warning until then.
             </li>
             <li>
               Asymmetry is computed across regional centroids, so a region with translated <em>and</em> rotated asymmetry may report less than its true point-cloud asymmetry. Per-vertex asymmetry is on the roadmap.

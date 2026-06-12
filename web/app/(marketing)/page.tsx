@@ -296,7 +296,7 @@ function CTA() {
           Walk the AART. Land the HIT.
         </h2>
         <p className="mx-auto mt-4 max-w-xl text-[var(--color-ink-dim)]">
-          FaceMap brings the FAS™ to iPhone. Capture, grade, and track every facet on a single radar — built for licensed practitioners.
+          FaceMap brings the FAS™ to iPhone — a 3D measurement tool that grades every facet and measures the objective volume change your treatment produced, visit-over-visit. Built for licensed practitioners.
         </p>
         <div className="mt-8 flex justify-center gap-3">
           <Link
