@@ -11,6 +11,7 @@ struct ComparisonScreen: View {
     @StateObject private var meshA = FaceMeshController()
     @StateObject private var meshB = FaceMeshController()
     @State private var syncRotation = true
+    @State private var regionChanges: [RegionChange] = []
 
     private var resultsA: [MetricResult] { visitA.metricResults }
     private var resultsB: [MetricResult] { visitB.metricResults }
@@ -23,6 +24,8 @@ struct ComparisonScreen: View {
                 VStack(alignment: .leading, spacing: 16) {
                     headerCard
                     meshRow
+                    photoRow
+                    regionChangeSection
                     wheelRow
                     deltaSection
                 }
@@ -32,6 +35,12 @@ struct ComparisonScreen: View {
         }
         .navigationTitle("Compare")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            // Decoding the two stored meshes is too heavy to repeat per render.
+            if let a = visitA.capturedFace, let b = visitB.capturedFace {
+                regionChanges = SurfaceChangeAnalyzer.regionChanges(from: a, to: b)
+            }
+        }
         .toolbarColorScheme(.light, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -117,6 +126,95 @@ struct ComparisonScreen: View {
             Text("Mesh unreadable").font(Type.caption).foregroundStyle(Theme.inkMuted)
         }
         .frame(height: 200)
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+    }
+
+    // MARK: - Photo row (clinical before/after, shown when both visits have one)
+
+    @ViewBuilder
+    private var photoRow: some View {
+        if let photoA = visitA.frontalPhotoJPEG.flatMap(UIImage.init(data:)),
+           let photoB = visitB.frontalPhotoJPEG.flatMap(UIImage.init(data:)) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("CLINICAL PHOTOS").sectionHeaderStyle()
+                HStack(spacing: 12) {
+                    photoColumn(photoA)
+                    Image(systemName: "arrow.right")
+                        .foregroundStyle(Theme.inkDim)
+                    photoColumn(photoB)
+                }
+            }
+        }
+    }
+
+    private func photoColumn(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous)
+                    .stroke(Theme.hairline, lineWidth: 1)
+            )
+    }
+
+    // MARK: - Region projection changes (visit-over-visit volume tracking)
+
+    @ViewBuilder
+    private var regionChangeSection: some View {
+        if !regionChanges.isEmpty {
+            let significant = regionChanges.filter(\.exceedsNoiseFloor)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("REGION PROJECTION CHANGES").sectionHeaderStyle()
+
+                if significant.isEmpty {
+                    Text(String(format: "No region changed by more than the ±%.1f mm capture-noise floor.",
+                                SurfaceChangeAnalyzer.noiseFloorMeters * 1000))
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkDim)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Theme.surface)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(significant) { regionChangeRow($0) }
+                    }
+                }
+
+                Text(String(format: "Mean anterior-projection change per region, A → B, after bony-landmark alignment. Changes within ±%.1f mm are capture noise. %d of %d regions unchanged.",
+                            SurfaceChangeAnalyzer.noiseFloorMeters * 1000,
+                            regionChanges.count - significant.count,
+                            regionChanges.count))
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.inkMuted)
+            }
+        }
+    }
+
+    private func regionChangeRow(_ c: RegionChange) -> some View {
+        let gained = c.deltaZMeters > 0
+        return HStack(spacing: 12) {
+            Image(systemName: gained ? "arrow.up.forward.circle.fill" : "arrow.down.forward.circle.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(gained ? Theme.ink : Theme.domainSymmetry)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(c.region.displayName)
+                    .font(Type.metricName)
+                    .foregroundStyle(Theme.ink)
+                Text(gained ? "Projection gained" : "Projection lost")
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.inkDim)
+            }
+            Spacer()
+            Text(String(format: "%+.1f mm", c.deltaZMeters * 1000))
+                .font(Type.body.monospacedDigit().weight(.semibold))
+                .foregroundStyle(Theme.ink)
+        }
+        .padding(12)
+        .background(Theme.surface)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
     }
 
