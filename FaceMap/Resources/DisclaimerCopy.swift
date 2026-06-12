@@ -12,12 +12,24 @@ enum DisclaimerCopy {
     The practitioner is the sole clinical decision-maker for any aesthetic treatment. \
     Always confirm measurements against direct examination of the patient.
 
+    Metric outputs are not clinically meaningful until the landmark indices have been \
+    calibrated on this device (More → Calibrate landmarks). A warning is shown on every \
+    analysis until calibration is complete.
+
     By continuing, you confirm you are a licensed practitioner using this app as a planning aid \
     and that the patient has consented to having their face captured.
     """
 
     static let analysisFooter = """
     For practitioner planning use only. Not a medical recommendation.
+    """
+
+    static let uncalibratedWarning = """
+    Landmarks not calibrated on this device — metric outputs are not clinically meaningful. Tap to calibrate.
+    """
+
+    static let pdfUncalibratedWarning = """
+    Generated with uncalibrated landmark indices — measurements are not clinically validated.
     """
 
     /// Placeholder bio copy. Dr Nikolis to supply final text + portrait.

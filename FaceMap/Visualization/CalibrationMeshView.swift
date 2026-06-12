@@ -12,6 +12,9 @@ struct CalibrationMeshView: UIViewRepresentable {
     let pickedIndices: [Int]
     /// Vertex index that should pulse as "currently picked" (most recent), if any.
     let highlightedIndex: Int?
+    /// Vertex around which nearby vertex indices are rendered as text labels — the
+    /// calibration debug aid described in `FaceLandmarkIndices`. `nil` hides labels.
+    let indexLabelCenter: Int?
     let controller: FaceMeshController
     let onVertexTapped: (Int) -> Void
 
@@ -156,6 +159,54 @@ struct CalibrationMeshView: UIViewRepresentable {
             marker.position = pos
             markerAnchor.addChild(marker)
         }
+
+        addIndexLabels(to: markerAnchor, verts: verts, centroid: centroid)
+    }
+
+    /// Labels the vertices nearest `indexLabelCenter` with their indices so the
+    /// practitioner can read exact vertex numbers while calibrating.
+    private func addIndexLabels(to markerAnchor: AnchorEntity,
+                                verts: [SIMD3<Float>],
+                                centroid: SIMD3<Float>) {
+        guard let center = indexLabelCenter, center < verts.count else { return }
+        let centerPos = verts[center]
+        let nearest = verts.indices
+            .map { (idx: $0, d: simd_distance_squared(verts[$0], centerPos)) }
+            .sorted { $0.d < $1.d }
+            .prefix(16)
+        for (idx, _) in nearest {
+            markerAnchor.addChild(Self.indexLabel(idx, position: verts[idx] - centroid))
+        }
+    }
+
+    private static func indexLabel(_ index: Int, position: SIMD3<Float>) -> ModelEntity {
+        let textMesh = MeshResource.generateText(
+            String(index),
+            extrusionDepth: 0,
+            font: .systemFont(ofSize: 8, weight: .bold),
+            containerFrame: .zero,
+            alignment: .center,
+            lineBreakMode: .byTruncatingTail
+        )
+        var mat = UnlitMaterial(color: .cyan)
+        mat.blending = .opaque
+        let entity = ModelEntity(mesh: textMesh, materials: [mat])
+
+        let s: Float = 0.0005
+        entity.scale = SIMD3<Float>(repeating: s)
+
+        // Push slightly off the surface (radially from mesh centre) to avoid z-fighting.
+        let outward = simd_length(position) > 1e-6
+            ? simd_normalize(position)
+            : SIMD3<Float>(0, 0, 1)
+        entity.position = position + outward * 0.003
+
+        // Centre horizontally — generateText anchors at the bottom-left.
+        let bounds = entity.visualBounds(relativeTo: entity)
+        entity.position.x -= bounds.extents.x / 2 * s
+
+        entity.components.set(LabelBillboardComponent())
+        return entity
     }
 
     /// Returns the model entity, the centered vertex array used for picking, and the centroid.

@@ -9,7 +9,7 @@ import simd
 struct GoldenRatioMetric: FaceMetric {
     static let id = "facial.goldenRatio"
     static let displayName = "Golden ratio (selected)"
-    static let domain: FaceDomain = .symmetry
+    static let domain: FaceDomain = .proportions
     static let phi = 1.6180339887
 
     var regions: [FacialRegion] { [.lipUpper, .lipLower, .perioral, .chin] }

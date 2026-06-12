@@ -13,11 +13,18 @@ struct CalibrationScreen: View {
     @State private var stepIndex: Int = 0
     @State private var picked: [AnatomicalLandmark: Int] = [:]
     @State private var lastTappedIndex: Int? = nil
+    @State private var showIndexLabels = false
 
     private let order: [AnatomicalLandmark] = AnatomicalLandmark.calibrationOrder
 
     private var current: AnatomicalLandmark? {
         stepIndex < order.count ? order[stepIndex] : nil
+    }
+
+    /// Where to show vertex-index labels: around the last tap, falling back to the
+    /// current landmark's effective (picked or seeded) vertex.
+    private var indexLabelCenter: Int? {
+        lastTappedIndex ?? current.flatMap { picked[$0] ?? FaceLandmarkIndices.vertexIndex[$0] }
     }
 
     var body: some View {
@@ -29,6 +36,7 @@ struct CalibrationScreen: View {
                     face: face,
                     pickedIndices: Array(picked.values),
                     highlightedIndex: lastTappedIndex,
+                    indexLabelCenter: showIndexLabels ? indexLabelCenter : nil,
                     controller: meshController,
                     onVertexTapped: handleTap
                 )
@@ -102,6 +110,16 @@ struct CalibrationScreen: View {
                 .foregroundStyle(.white)
             }
             Spacer(minLength: 4)
+            Button {
+                showIndexLabels.toggle()
+            } label: {
+                Image(systemName: "textformat.123")
+                    .font(.caption.weight(.semibold))
+                    .padding(8)
+            }
+            .background(.ultraThinMaterial, in: Circle())
+            .foregroundStyle(showIndexLabels ? Color.cyan : .white)
+            .accessibilityLabel(showIndexLabels ? "Hide vertex indices" : "Show vertex indices")
             Button {
                 meshController.reset()
             } label: {

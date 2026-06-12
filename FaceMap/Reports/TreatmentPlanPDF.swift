@@ -18,7 +18,8 @@ enum TreatmentPlanPDF {
             visit: visit,
             results: visit.metricResults,
             pins: visit.annotations,
-            meshSnapshot: meshSnapshot
+            meshSnapshot: meshSnapshot,
+            isCalibrated: LandmarkCalibrationStore.shared.isFullyCalibrated
         ).frame(width: PDFTheme.pageWidth, height: PDFTheme.pageHeight))
 
         renderer.proposedSize = ProposedViewSize(
@@ -48,6 +49,8 @@ struct PDFPageView: View {
     let results: [MetricResult]
     let pins: [AnnotationPin]
     let meshSnapshot: UIImage?
+    /// Landmark-calibration state at export time; false adds a warning strip.
+    let isCalibrated: Bool
 
     var body: some View {
         ZStack {
@@ -59,6 +62,12 @@ struct PDFPageView: View {
 
                 Rectangle().fill(PDFTheme.pageHairline).frame(height: 1)
                     .padding(.top, 14).padding(.horizontal, PDFTheme.margin)
+
+                if !isCalibrated {
+                    calibrationWarningStrip
+                        .padding(.horizontal, PDFTheme.margin)
+                        .padding(.top, 10)
+                }
 
                 HStack(alignment: .top, spacing: PDFTheme.gutter) {
                     leftColumn
@@ -215,6 +224,21 @@ struct PDFPageView: View {
         }
     }
 
+    private var calibrationWarningStrip: some View {
+        HStack(spacing: 6) {
+            Text("⚠")
+                .font(.system(size: 9, weight: .semibold))
+            Text(DisclaimerCopy.pdfUncalibratedWarning)
+                .font(.system(size: 8, weight: .semibold))
+            Spacer()
+        }
+        .foregroundStyle(Color(red: 0.47, green: 0.21, blue: 0.06))
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(Color(red: 1.0, green: 0.95, blue: 0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+
     // MARK: Signature + footer
 
     private var signatureBlock: some View {
@@ -243,7 +267,7 @@ struct PDFPageView: View {
                     .font(.system(size: 8))
                     .foregroundStyle(PDFTheme.pageInkMuted)
                 Spacer()
-                Text("FaceMap v0.2 · Page 1 of 1")
+                Text("FaceMap v\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—") · Page 1 of 1")
                     .font(.system(size: 8).monospacedDigit())
                     .foregroundStyle(PDFTheme.pageInkMuted)
             }

@@ -24,6 +24,27 @@ struct FaceMapApp: App {
             fatalError("Failed to create SwiftData ModelContainer: \(error)")
         }
         self.store = CaseStore(context: container.mainContext)
+        Self.excludeStoreFromBackup(container)
+    }
+
+    /// Patient meshes and notes are stored unencrypted in the SwiftData store, so the
+    /// store (and its SQLite sidecars) must not travel into iCloud / Finder backups.
+    /// See README "⚠️ Pre-production checklist", item 3.
+    private static func excludeStoreFromBackup(_ container: ModelContainer) {
+        let fm = FileManager.default
+        for configuration in container.configurations {
+            for suffix in ["", "-shm", "-wal"] {
+                var url = URL(fileURLWithPath: configuration.url.path + suffix)
+                guard fm.fileExists(atPath: url.path) else { continue }
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true
+                do {
+                    try url.setResourceValues(values)
+                } catch {
+                    assertionFailure("Failed to exclude \(url.lastPathComponent) from backup: \(error)")
+                }
+            }
+        }
     }
 
     var body: some Scene {

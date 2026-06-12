@@ -12,7 +12,7 @@ import simd
 struct FacialFifthsMetric: FaceMetric {
     static let id = "facial.fifths"
     static let displayName = "Facial fifths"
-    static let domain: FaceDomain = .symmetry
+    static let domain: FaceDomain = .proportions
     var regions: [FacialRegion] { [.templeL, .templeR, .midfaceL, .midfaceR] }
 
     func evaluate(_ face: AnalyzableFace) -> MetricResult {

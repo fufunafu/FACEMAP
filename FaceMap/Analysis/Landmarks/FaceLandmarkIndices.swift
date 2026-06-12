@@ -13,10 +13,10 @@ import Foundation
 // a real face mesh on a real device. The recommended procedure is:
 //
 //   1. Capture a face at neutral expression.
-//   2. Render the captured mesh with vertex indices labeled (a debug build flag will
-//      enable this in `FaceMeshOverlay` once we wire it up — TODO).
-//   3. For each landmark, identify the vertex closest to the anatomical point and
-//      update the constant below.
+//   2. Open More → Calibrate landmarks. The "123" button in the viewer labels the
+//      vertex indices around the current landmark / last tap (`CalibrationMeshView`).
+//   3. For each landmark, tap the vertex closest to the anatomical point; Save writes
+//      the override to `LandmarkCalibrationStore`.
 //   4. Re-run unit tests and verify metric outputs against caliper measurements.
 //
 // Until calibration is performed, **metrics will produce values, but those values are

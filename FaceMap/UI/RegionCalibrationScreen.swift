@@ -60,6 +60,7 @@ struct RegionCalibrationScreen: View {
                     face: face,
                     pickedIndices: allPickedIndices,
                     highlightedIndex: currentRegionPicks.last,
+                    indexLabelCenter: nil,
                     controller: meshController,
                     onVertexTapped: handleTap
                 )

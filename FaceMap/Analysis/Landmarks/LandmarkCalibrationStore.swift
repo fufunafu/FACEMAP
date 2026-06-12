@@ -62,5 +62,13 @@ final class LandmarkCalibrationStore {
 
     var hasAnyCalibration: Bool { !calibrated().isEmpty }
 
+    /// True once every anatomical landmark has a practitioner-calibrated index.
+    /// Until then metric outputs rest on the placeholder indices and the UI/PDF
+    /// show the uncalibrated warning.
+    var isFullyCalibrated: Bool {
+        let saved = calibrated()
+        return AnatomicalLandmark.allCases.allSatisfy { saved[$0] != nil }
+    }
+
     var calibratedCount: Int { calibrated().count }
 }

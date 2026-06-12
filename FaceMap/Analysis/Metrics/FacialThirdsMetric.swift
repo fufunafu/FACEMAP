@@ -7,7 +7,7 @@ import simd
 struct FacialThirdsMetric: FaceMetric {
     static let id = "facial.thirds"
     static let displayName = "Facial thirds"
-    static let domain: FaceDomain = .symmetry
+    static let domain: FaceDomain = .proportions
     var regions: [FacialRegion] { [.forehead, .midfaceL, .midfaceR, .chin, .lipUpper, .lipLower] }
 
     func evaluate(_ face: AnalyzableFace) -> MetricResult {

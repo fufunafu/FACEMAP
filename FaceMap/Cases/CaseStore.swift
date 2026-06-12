@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import SwiftData
 
 /// Thin facade over a `ModelContext`. Exists so call sites don't depend directly on SwiftData
@@ -6,6 +7,9 @@ import SwiftData
 final class CaseStore: ObservableObject {
     let context: ModelContext
     private let cloudSync: any CloudSync
+    // Interpolated values are redacted in release logs by default, so a SwiftData
+    // error that embeds model field values can't leak patient data to the device log.
+    private let logger = Logger(subsystem: "com.fuanne.facemap", category: "CaseStore")
 
     init(context: ModelContext, cloudSync: any CloudSync = NoopCloudSync()) {
         self.context = context
@@ -82,7 +86,7 @@ final class CaseStore: ObservableObject {
             try context.save()
             Task { try? await cloudSync.upload(patientCase) }
         } catch {
-            print("CaseStore.save failed:", error)
+            logger.error("CaseStore.save failed: \(error.localizedDescription)")
         }
     }
 
