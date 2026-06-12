@@ -10,40 +10,29 @@ struct PatientListScreen: View {
            sort: \Patient.createdAt, order: .reverse)
     private var patients: [Patient]
 
+    @Query(filter: #Predicate<Patient> { $0.archivedAt != nil },
+           sort: \Patient.createdAt, order: .reverse)
+    private var archivedPatients: [Patient]
+
     @State private var search = ""
     @State private var showingNewPatient = false
     @State private var newPatientCode = ""
+    @State private var patientToArchive: Patient?
+    @State private var showingArchiveConfirm = false
+    @State private var patientToDelete: Patient?
+    @State private var showingDeleteConfirm = false
+
+    // TODO: migrate to Theme.warning token
+    private let warningAmber = Color(hex: 0xC77D0A)
 
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
 
-            if patients.isEmpty {
+            if patients.isEmpty && archivedPatients.isEmpty {
                 emptyState
             } else {
-                List {
-                    Section {
-                        ForEach(filtered) { p in
-                            NavigationLink(value: p) {
-                                PatientListRow(patient: p)
-                            }
-                            .listRowBackground(Theme.surface)
-                        }
-                        .onDelete { indexes in
-                            for i in indexes { store.archive(filtered[i]) }
-                        }
-                    } header: {
-                        Text("Patients").sectionHeaderStyle()
-                    } footer: {
-                        Text("Tap a patient to see their visit timeline. Swipe a row to archive.")
-                            .font(Type.caption)
-                            .foregroundStyle(Theme.inkMuted)
-                    }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .background(Theme.canvas)
-                .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
+                patientList
             }
         }
         .navigationTitle("Patients")
@@ -66,13 +55,178 @@ struct PatientListScreen: View {
             PatientDetailScreen(patient: p)
         }
         .sheet(isPresented: $showingNewPatient) { newPatientSheet }
+        .confirmationDialog(
+            "Archive this patient?",
+            isPresented: $showingArchiveConfirm,
+            titleVisibility: .visible,
+            presenting: patientToArchive
+        ) { p in
+            Button("Archive \(p.code)") {
+                store.archive(p)
+                patientToArchive = nil
+            }
+            Button("Cancel", role: .cancel) { patientToArchive = nil }
+        } message: { _ in
+            Text("Archived patients are hidden from the main list. You can unarchive them — or delete them permanently — from the Archived section.")
+        }
+        .confirmationDialog(
+            "Permanently delete this patient?",
+            isPresented: $showingDeleteConfirm,
+            titleVisibility: .visible,
+            presenting: patientToDelete
+        ) { p in
+            Button("Delete \(p.code) and all visits", role: .destructive) {
+                store.deletePatient(p)
+                patientToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { patientToDelete = nil }
+        } message: { _ in
+            Text("This permanently deletes the patient and every visit captured for them. This cannot be undone.")
+        }
+    }
+
+    // MARK: - List
+
+    private var patientList: some View {
+        List {
+            if !filtered.isEmpty {
+                Section {
+                    ForEach(filtered) { p in
+                        NavigationLink(value: p) {
+                            PatientListRow(patient: p, matchSubtitle: matchingVisitSubtitle(for: p))
+                        }
+                        .listRowBackground(Theme.surface)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button {
+                                patientToArchive = p
+                                showingArchiveConfirm = true
+                            } label: {
+                                Label("Archive", systemImage: "archivebox")
+                            }
+                            .tint(Theme.inkDim)
+                        }
+                    }
+                } header: {
+                    Text("Patients").sectionHeaderStyle()
+                } footer: {
+                    Text("Tap a patient to see their visit timeline. Swipe a row to archive.")
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkMuted)
+                }
+            }
+
+            if !filteredArchived.isEmpty {
+                Section {
+                    ForEach(filteredArchived) { p in
+                        NavigationLink(value: p) {
+                            PatientListRow(patient: p, matchSubtitle: matchingVisitSubtitle(for: p))
+                                .opacity(0.6)
+                        }
+                        .listRowBackground(Theme.surface)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                patientToDelete = p
+                                showingDeleteConfirm = true
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            Button {
+                                store.unarchive(p)
+                            } label: {
+                                Label("Unarchive", systemImage: "tray.and.arrow.up")
+                            }
+                            .tint(Theme.inkDim)
+                        }
+                        .contextMenu {
+                            Button {
+                                store.unarchive(p)
+                            } label: {
+                                Label("Unarchive", systemImage: "tray.and.arrow.up")
+                            }
+                            Button(role: .destructive) {
+                                patientToDelete = p
+                                showingDeleteConfirm = true
+                            } label: {
+                                Label("Delete permanently", systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Archived").sectionHeaderStyle()
+                } footer: {
+                    Text("Swipe to unarchive, or to delete permanently.")
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkMuted)
+                }
+            }
+
+            if filtered.isEmpty && filteredArchived.isEmpty {
+                Section {
+                    noResultsRow
+                        .listRowBackground(Color.clear)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Theme.canvas)
+        .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always))
+    }
+
+    private var noResultsRow: some View {
+        VStack(spacing: 6) {
+            Text("No patients match \"\(trimmedSearch)\"")
+                .font(Type.body)
+                .foregroundStyle(Theme.inkDim)
+            Text("Search matches patient codes, visit labels, and visit notes.")
+                .font(Type.caption)
+                .foregroundStyle(Theme.inkMuted)
+        }
+        .frame(maxWidth: .infinity)
+        .multilineTextAlignment(.center)
+        .padding(.vertical, 24)
+    }
+
+    // MARK: - Search
+
+    private var trimmedSearch: String {
+        search.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private var filtered: [Patient] {
-        let trimmed = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return patients }
-        return patients.filter { $0.code.localizedCaseInsensitiveContains(trimmed) }
+        filterPatients(patients)
     }
+
+    private var filteredArchived: [Patient] {
+        // Archived patients only appear while browsing (no query) or when they match.
+        filterPatients(archivedPatients)
+    }
+
+    /// Matches the query against the patient code, visit labels, and visit notes.
+    private func filterPatients(_ source: [Patient]) -> [Patient] {
+        guard !trimmedSearch.isEmpty else { return source }
+        return source.filter { p in
+            p.code.localizedCaseInsensitiveContains(trimmedSearch)
+                || matchingVisit(for: p) != nil
+        }
+    }
+
+    /// First visit whose label or notes match the current query.
+    private func matchingVisit(for p: Patient) -> PatientCase? {
+        guard !trimmedSearch.isEmpty else { return nil }
+        return p.sortedCases.first { c in
+            c.label.localizedCaseInsensitiveContains(trimmedSearch)
+                || (c.notes ?? "").localizedCaseInsensitiveContains(trimmedSearch)
+        }
+    }
+
+    /// Subtitle shown under a row when the query matched a visit rather than the code.
+    private func matchingVisitSubtitle(for p: Patient) -> String? {
+        guard let hit = matchingVisit(for: p) else { return nil }
+        return "Matches \(hit.label)"
+    }
+
+    // MARK: - Empty state
 
     private var emptyState: some View {
         VStack(spacing: 24) {
@@ -100,6 +254,16 @@ struct PatientListScreen: View {
         }
     }
 
+    // MARK: - New patient sheet
+
+    private var trimmedNewCode: String {
+        newPatientCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var newCodeInUse: Bool {
+        store.isCodeInUse(trimmedNewCode)
+    }
+
     private var newPatientSheet: some View {
         NavigationStack {
             ZStack {
@@ -109,6 +273,11 @@ struct PatientListScreen: View {
                         TextField("Patient code", text: $newPatientCode)
                             .textInputAutocapitalization(.characters)
                             .autocorrectionDisabled()
+                        if newCodeInUse {
+                            Text("This code is already in use")
+                                .font(Type.caption)
+                                .foregroundStyle(warningAmber)
+                        }
                     } footer: {
                         Text("Use a pseudonym such as \"P-014\". No identifying information.")
                     }
@@ -124,10 +293,11 @@ struct PatientListScreen: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Create") {
-                        _ = store.createPatient(code: newPatientCode)
+                        guard !trimmedNewCode.isEmpty, !newCodeInUse else { return }
+                        _ = store.createPatient(code: trimmedNewCode)
                         showingNewPatient = false
                     }
-                    .disabled(newPatientCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(trimmedNewCode.isEmpty || newCodeInUse)
                 }
             }
         }
@@ -139,6 +309,7 @@ struct PatientListScreen: View {
 
 private struct PatientListRow: View {
     let patient: Patient
+    var matchSubtitle: String? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -156,6 +327,11 @@ private struct PatientListRow: View {
                             .font(Type.caption)
                             .foregroundStyle(Theme.inkDim)
                     }
+                }
+                if let matchSubtitle {
+                    Text(matchSubtitle)
+                        .font(Type.caption)
+                        .foregroundStyle(Theme.inkMuted)
                 }
             }
             Spacer()

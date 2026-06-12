@@ -43,3 +43,4 @@ fastlane/test_output
 .env.local
 .env.*.local
 .vercel
+.claude/

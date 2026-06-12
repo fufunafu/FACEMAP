@@ -2,6 +2,7 @@ import SwiftUI
 import ARKit
 import CoreImage
 import RealityKit
+import AVFoundation
 import UIKit
 
 /// SwiftUI host for an `ARView` configured for front-camera face tracking.
@@ -34,6 +35,12 @@ struct FaceCaptureView: UIViewRepresentable {
 
         enum TrackingState: Equatable {
             case unsupported
+            /// Camera access denied or restricted — user must change it in Settings.
+            case permissionDenied
+            /// The AR session reported a non-recoverable error.
+            case sessionFailed
+            /// The session is temporarily interrupted (phone call, backgrounding, Split View…).
+            case interrupted
             case noFace
             case tracking
         }
@@ -56,24 +63,62 @@ struct FaceCaptureView: UIViewRepresentable {
             if recentGeometries.count > bufferSize { recentGeometries.removeFirst() }
 
             if pendingSnapshot, recentGeometries.count >= bufferSize {
-                pendingSnapshot = false
-                captureSnapshot()
+                // Keep the request alive if this frame couldn't produce a snapshot
+                // (e.g. mixed-topology buffer) so a later frame can retry.
+                if captureSnapshot() { pendingSnapshot = false }
             }
         }
 
+        // MARK: ARSessionDelegate — failure & interruption
+
+        func session(_ session: ARSession, didFailWithError error: Error) {
+            clearFrameBuffer()
+            if let arError = error as? ARError, arError.code == .cameraUnauthorized {
+                onTrackingState(.permissionDenied)
+            } else {
+                onTrackingState(.sessionFailed)
+            }
+        }
+
+        func sessionWasInterrupted(_ session: ARSession) {
+            clearFrameBuffer()
+            onTrackingState(.interrupted)
+        }
+
+        func sessionInterruptionEnded(_ session: ARSession) {
+            // Tracking resumes via didUpdate; report a neutral state until a face is found.
+            onTrackingState(.noFace)
+        }
+
+        /// Drops buffered frames and any in-flight capture request. Called on
+        /// interruption/failure so a resumed session can't average stale frames.
+        func clearFrameBuffer() {
+            recentGeometries.removeAll()
+            pendingSnapshot = false
+        }
+
         /// Average the buffered frames into a single CapturedFace and emit it.
-        func captureSnapshot() {
-            guard !recentGeometries.isEmpty, !triangleIndices.isEmpty else { return }
-            let count = recentGeometries.count
-            let n = recentGeometries[0].vertices.count
+        /// Returns false when no valid snapshot could be produced.
+        @discardableResult
+        func captureSnapshot() -> Bool {
+            guard !triangleIndices.isEmpty,
+                  let reference = recentGeometries.last?.vertices.count,
+                  reference > 0 else { return false }
+            // Only average samples that share the latest frame's topology — a mid-buffer
+            // vertex-count change would otherwise corrupt (or crash) the average.
+            let samples = recentGeometries.filter { $0.vertices.count == reference }
+            guard !samples.isEmpty else { return false }
+
+            let count = samples.count
+            let n = reference
             var avg = Array(repeating: SIMD3<Float>(repeating: 0), count: n)
-            for sample in recentGeometries {
+            for sample in samples {
                 for i in 0..<n { avg[i] += sample.vertices[i] }
             }
             let scale = Float(1) / Float(count)
             for i in 0..<n { avg[i] *= scale }
 
-            let last = recentGeometries.last!
+            let last = samples.last!
             let face = CapturedFace(
                 vertices: avg,
                 triangleIndices: triangleIndices,
@@ -82,6 +127,7 @@ struct FaceCaptureView: UIViewRepresentable {
                 timestamp: Date()
             )
             onSnapshot(face, currentFramePhotoJPEG())
+            return true
         }
 
         /// JPEG of the camera frame at capture time, rotated to portrait. The raw
@@ -117,14 +163,39 @@ struct FaceCaptureView: UIViewRepresentable {
             return view
         }
 
+        // Pre-flight camera authorization — a denied camera otherwise leaves the
+        // session silently dead while the UI waits for a face forever.
+        let coordinator = context.coordinator
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            Self.runFaceTrackingSession(on: view, coordinator: coordinator)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    guard let view = coordinator.arView else { return }
+                    if granted {
+                        Self.runFaceTrackingSession(on: view, coordinator: coordinator)
+                    } else {
+                        coordinator.onTrackingState(.permissionDenied)
+                    }
+                }
+            }
+        case .denied, .restricted:
+            coordinator.onTrackingState(.permissionDenied)
+        @unknown default:
+            coordinator.onTrackingState(.permissionDenied)
+        }
+        return view
+    }
+
+    private static func runFaceTrackingSession(on view: ARView, coordinator: Coordinator) {
         let config = ARFaceTrackingConfiguration()
         config.isLightEstimationEnabled = true
         if ARFaceTrackingConfiguration.supportsWorldTracking {
             config.isWorldTrackingEnabled = false
         }
-        view.session.delegate = context.coordinator
+        view.session.delegate = coordinator
         view.session.run(config, options: [.resetTracking, .removeExistingAnchors])
-        return view
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {

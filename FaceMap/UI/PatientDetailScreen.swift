@@ -7,12 +7,24 @@ import Charts
 struct PatientDetailScreen: View {
     @Bindable var patient: Patient
     @EnvironmentObject var store: CaseStore
+    @Environment(\.dismiss) private var dismiss
 
     @State private var renameOpen = false
     @State private var draftCode = ""
     @State private var multiSelectMode = false
     @State private var selectedForCompare: Set<UUID> = []
     @State private var showCompare = false
+    @State private var showingArchiveConfirm = false
+
+    // Visit lifecycle state
+    @State private var caseToRename: PatientCase?
+    @State private var renameVisitDraft = ""
+    @State private var caseToMove: PatientCase?
+    @State private var caseToDelete: PatientCase?
+    @State private var showingDeleteVisitConfirm = false
+
+    // TODO: migrate to Theme.warning token
+    private let warningAmber = Color(hex: 0xC77D0A)
 
     private var sortedCases: [PatientCase] { patient.sortedCases }
 
@@ -52,8 +64,8 @@ struct PatientDetailScreen: View {
                         }
                     }
                     Divider()
-                    Button("Archive patient", role: .destructive) {
-                        store.archive(patient)
+                    Button("Archive patient") {
+                        showingArchiveConfirm = true
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -62,11 +74,43 @@ struct PatientDetailScreen: View {
             }
         }
         .sheet(isPresented: $renameOpen) { renameSheet }
+        .sheet(item: $caseToRename) { c in renameVisitSheet(c) }
+        .sheet(item: $caseToMove) { c in
+            PatientPickerSheet(title: "Move to patient", currentPatient: patient) { target in
+                store.reassign(c, to: target)
+            }
+            .environmentObject(store)
+        }
+        .confirmationDialog(
+            "Archive this patient?",
+            isPresented: $showingArchiveConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Archive") {
+                store.archive(patient)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Archived patients are hidden from the main list. You can unarchive them — or delete them permanently — from the Archived section.")
+        }
+        .confirmationDialog(
+            "Delete this visit?",
+            isPresented: $showingDeleteVisitConfirm,
+            titleVisibility: .visible,
+            presenting: caseToDelete
+        ) { c in
+            Button("Delete \(c.label)", role: .destructive) {
+                store.delete(c)
+                caseToDelete = nil
+            }
+            Button("Cancel", role: .cancel) { caseToDelete = nil }
+        } message: { _ in
+            Text("This permanently deletes the visit, its captures, and its notes.")
+        }
         .navigationDestination(isPresented: $showCompare) {
             if let pair = selectedComparePair {
                 ComparisonScreen(patient: patient, visitA: pair.0, visitB: pair.1)
-            } else {
-                Text("Pick exactly two visits to compare.")
             }
         }
     }
@@ -87,9 +131,10 @@ struct PatientDetailScreen: View {
             }
 
             NavigationLink {
-                CaptureScreen()
+                // Threads the patient through CaptureScreen → AnalysisScreen so the
+                // save sheet pre-fills and locks this patient.
+                CaptureScreen(patient: patient)
                     .environmentObject(store)
-                    .onDisappear { /* binding handled in CaptureScreen save */ }
             } label: {
                 Text("Add visit")
             }
@@ -103,38 +148,56 @@ struct PatientDetailScreen: View {
     private func latestVisitCard(_ c: PatientCase) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("LATEST VISIT").sectionHeaderStyle()
-            HStack(alignment: .top, spacing: 12) {
-                AestheticWheel(results: c.metricResults, diameter: 200, showsLabels: true)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(c.label)
-                        .font(Type.titleLarge)
-                        .foregroundStyle(Theme.ink)
-                    Text(c.createdAt, style: .date)
-                        .font(Type.caption)
-                        .foregroundStyle(Theme.inkDim)
-                    Text(summary(of: c))
-                        .font(Type.caption)
-                        .foregroundStyle(Theme.inkMuted)
-                        .padding(.top, 4)
-                    Spacer()
-                    if let face = c.capturedFace {
-                        NavigationLink {
-                            AnalysisScreen(
-                            multiPose: c.multiPoseCapture ?? MultiPoseCapture(frontal: face),
-                            existingCase: c
-                        )
-                        } label: {
-                            Text("Open")
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    AestheticWheel(results: c.metricResults, diameter: 200, showsLabels: true)
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(c.label)
+                            .font(Type.titleLarge)
+                            .foregroundStyle(Theme.ink)
+                        Text(c.createdAt, style: .date)
+                            .font(Type.caption)
+                            .foregroundStyle(Theme.inkDim)
+                        Text(summary(of: c))
+                            .font(Type.caption)
+                            .foregroundStyle(Theme.inkMuted)
+                            .padding(.top, 4)
+                        Spacer()
+                        if let face = c.capturedFace {
+                            NavigationLink {
+                                AnalysisScreen(
+                                multiPose: c.multiPoseCapture ?? MultiPoseCapture(frontal: face),
+                                existingCase: c
+                            )
+                            } label: {
+                                Text("Open")
+                            }
+                            .buttonStyle(.ghost)
                         }
-                        .buttonStyle(.ghost)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                if sortedCases.count >= 2 {
+                    Button {
+                        compareWithPrevious()
+                    } label: {
+                        Label("Compare with previous", systemImage: "arrow.left.arrow.right")
+                    }
+                    .buttonStyle(.primary)
+                }
             }
             .padding(16)
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
         }
+    }
+
+    /// One-tap compare of the two most recent visits.
+    private func compareWithPrevious() {
+        let recent = sortedCases.prefix(2)
+        guard recent.count == 2 else { return }
+        selectedForCompare = Set(recent.map(\.id))
+        showCompare = true
     }
 
     private var addFirstVisitCard: some View {
@@ -177,7 +240,7 @@ struct PatientDetailScreen: View {
                     .foregroundStyle(Theme.ink)
             }
             if series.isEmpty {
-                Text("Coming soon")
+                Text("No data yet")
                     .font(Type.caption)
                     .foregroundStyle(Theme.inkMuted)
                     .frame(width: 140, height: 56, alignment: .center)
@@ -265,9 +328,34 @@ struct PatientDetailScreen: View {
                     visitRowContent(c, isSelected: false)
                 }
                 .buttonStyle(.plain)
+                .contextMenu { visitContextMenu(c) }
             } else {
-                visitRowContent(c, isSelected: false).opacity(0.5)
+                visitRowContent(c, isSelected: false)
+                    .opacity(0.5)
+                    .contextMenu { visitContextMenu(c) }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func visitContextMenu(_ c: PatientCase) -> some View {
+        Button {
+            renameVisitDraft = c.label
+            caseToRename = c
+        } label: {
+            Label("Rename visit", systemImage: "pencil")
+        }
+        Button {
+            caseToMove = c
+        } label: {
+            Label("Move to patient…", systemImage: "person.crop.circle.badge.checkmark")
+        }
+        Divider()
+        Button(role: .destructive) {
+            caseToDelete = c
+            showingDeleteVisitConfirm = true
+        } label: {
+            Label("Delete visit", systemImage: "trash")
         }
     }
 
@@ -324,12 +412,27 @@ struct PatientDetailScreen: View {
         return "\(flagged.count) flagged · worst: \(worst.metricName)"
     }
 
+    // MARK: - Rename patient code
+
+    private var trimmedDraftCode: String {
+        draftCode.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var draftCodeInUse: Bool {
+        store.isCodeInUse(trimmedDraftCode, excluding: patient)
+    }
+
     private var renameSheet: some View {
         NavigationStack {
             Form {
                 Section {
                     TextField("Patient code", text: $draftCode)
                         .textInputAutocapitalization(.characters)
+                    if draftCodeInUse {
+                        Text("This code is already in use")
+                            .font(Type.caption)
+                            .foregroundStyle(warningAmber)
+                    }
                 } footer: {
                     Text("Pseudonymous code only. No PII.")
                 }
@@ -342,10 +445,47 @@ struct PatientDetailScreen: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        let trimmed = draftCode.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if !trimmed.isEmpty { patient.code = trimmed }
+                        guard !trimmedDraftCode.isEmpty, !draftCodeInUse else { return }
+                        store.persist("rename patient") {
+                            patient.code = trimmedDraftCode
+                        }
                         renameOpen = false
                     }
+                    .disabled(trimmedDraftCode.isEmpty || draftCodeInUse)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    // MARK: - Rename visit
+
+    private func renameVisitSheet(_ c: PatientCase) -> some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField("Visit label", text: $renameVisitDraft)
+                } footer: {
+                    Text("e.g. \"Visit 2 — pre-treatment\". No PII.")
+                }
+            }
+            .navigationTitle("Rename visit")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { caseToRename = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        let trimmed = renameVisitDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if !trimmed.isEmpty {
+                            store.persist("rename visit") {
+                                c.label = trimmed
+                            }
+                        }
+                        caseToRename = nil
+                    }
+                    .disabled(renameVisitDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }

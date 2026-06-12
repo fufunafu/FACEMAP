@@ -7,14 +7,34 @@ import SwiftData
 final class CaseStore: ObservableObject {
     let context: ModelContext
     private let cloudSync: any CloudSync
-    // Interpolated values are redacted in release logs by default, so a SwiftData
-    // error that embeds model field values can't leak patient data to the device log.
+    /// Redacting logger — never log codes, labels, or notes (treat them as private).
     private let logger = Logger(subsystem: "com.fuanne.facemap", category: "CaseStore")
+
+    /// Human-readable description of the most recent persistence failure.
+    /// Views observe this to drive a "could not save" alert; set to nil on dismiss.
+    @Published var lastSaveError: String?
 
     init(context: ModelContext, cloudSync: any CloudSync = NoopCloudSync()) {
         self.context = context
         self.cloudSync = cloudSync
         bootstrap()
+    }
+
+    // MARK: - Persistence funnel
+
+    /// Single choke point for `context.save()`. Runs `mutation`, attempts the save,
+    /// logs failures via the redacting logger, and records them in `lastSaveError`.
+    @discardableResult
+    func persist(_ operation: String, _ mutation: () -> Void = {}) -> Result<Void, Error> {
+        mutation()
+        do {
+            try context.save()
+            return .success(())
+        } catch {
+            logger.error("persist failed (\(operation, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+            lastSaveError = "Could not save changes — try again."
+            return .failure(error)
+        }
     }
 
     // MARK: - Bootstrap migration
@@ -30,23 +50,30 @@ final class CaseStore: ObservableObject {
         guard !orphans.isEmpty else { return }
 
         let unassigned = unassignedPatient()
-        for c in orphans { c.patient = unassigned }
-        try? context.save()
+        persist("bootstrap rebind") {
+            for c in orphans { c.patient = unassigned }
+        }
     }
 
     /// Fetches the "Unassigned" patient bucket, creating it on demand.
     func unassignedPatient() -> Patient {
+        if let existing = existingUnassignedPatient() {
+            return existing
+        }
+        let p = Patient(code: Patient.unassignedCode)
+        persist("create unassigned bucket") {
+            context.insert(p)
+        }
+        return p
+    }
+
+    /// The "Unassigned" bucket if it already exists — does NOT create it.
+    func existingUnassignedPatient() -> Patient? {
         let code = Patient.unassignedCode
         let fetch = FetchDescriptor<Patient>(
             predicate: #Predicate { $0.code == code }
         )
-        if let existing = (try? context.fetch(fetch))?.first {
-            return existing
-        }
-        let p = Patient(code: code)
-        context.insert(p)
-        try? context.save()
-        return p
+        return (try? context.fetch(fetch))?.first
     }
 
     // MARK: - Patient CRUD
@@ -54,46 +81,95 @@ final class CaseStore: ObservableObject {
     func createPatient(code: String) -> Patient {
         let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
         let p = Patient(code: trimmed.isEmpty ? "Untitled" : trimmed)
-        context.insert(p)
-        try? context.save()
+        persist("create patient") {
+            context.insert(p)
+        }
         return p
     }
 
+    /// True when another patient already uses `code` (case-insensitive).
+    /// Pass `excluding` when validating a rename so the patient doesn't collide with itself.
+    func isCodeInUse(_ code: String, excluding: Patient? = nil) -> Bool {
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let all = (try? context.fetch(FetchDescriptor<Patient>())) ?? []
+        return all.contains { p in
+            p.id != excluding?.id &&
+            p.code.localizedCaseInsensitiveCompare(trimmed) == .orderedSame
+        }
+    }
+
+    /// Non-archived patients, newest first. Used by the save-sheet and re-bind pickers.
+    func activePatients() -> [Patient] {
+        let fetch = FetchDescriptor<Patient>(
+            predicate: #Predicate { $0.archivedAt == nil },
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return (try? context.fetch(fetch)) ?? []
+    }
+
     func archive(_ patient: Patient) {
-        patient.archivedAt = Date()
-        try? context.save()
+        persist("archive patient") {
+            patient.archivedAt = Date()
+        }
     }
 
     func unarchive(_ patient: Patient) {
-        patient.archivedAt = nil
-        try? context.save()
+        persist("unarchive patient") {
+            patient.archivedAt = nil
+        }
     }
 
     func deletePatient(_ patient: Patient) {
         // Cascade deletes the cases via the relationship rule.
-        context.delete(patient)
-        try? context.save()
+        persist("delete patient") {
+            context.delete(patient)
+        }
     }
 
     // MARK: - Case CRUD
 
-    func save(_ patientCase: PatientCase) {
+    /// Saves a new case. Returns `.failure` when the underlying context save fails so the
+    /// caller can keep its UI (e.g. the save sheet) open and surface the error.
+    @discardableResult
+    func save(_ patientCase: PatientCase) -> Result<Void, Error> {
         if patientCase.patient == nil {
             patientCase.patient = unassignedPatient()
         }
-        context.insert(patientCase)
-        do {
-            try context.save()
+        let result = persist("save case") {
+            context.insert(patientCase)
+        }
+        if case .success = result {
             Task { try? await cloudSync.upload(patientCase) }
-        } catch {
-            logger.error("CaseStore.save failed: \(error.localizedDescription)")
+        }
+        return result
+    }
+
+    /// Moves a case (visit) to a different patient — the "re-bind" path for cases
+    /// that landed in the Unassigned bucket or were saved to the wrong patient.
+    @discardableResult
+    func reassign(_ patientCase: PatientCase, to patient: Patient) -> Result<Void, Error> {
+        persist("reassign case") {
+            patientCase.patient = patient
         }
     }
 
-    func delete(_ patientCase: PatientCase) {
+    @discardableResult
+    func delete(_ patientCase: PatientCase) -> Result<Void, Error> {
         let id = patientCase.id
-        context.delete(patientCase)
-        try? context.save()
-        Task { try? await cloudSync.delete(caseId: id) }
+        let result = persist("delete case") {
+            context.delete(patientCase)
+        }
+        if case .success = result {
+            Task { try? await cloudSync.delete(caseId: id) }
+        }
+        return result
+    }
+
+    /// Suggested label for the next visit of `patient` ("Visit N", N = case count + 1).
+    /// With no patient, counts the Unassigned bucket (without creating it).
+    func suggestedVisitLabel(for patient: Patient?) -> String {
+        let owner = patient ?? existingUnassignedPatient()
+        return "Visit \((owner?.cases.count ?? 0) + 1)"
     }
 }

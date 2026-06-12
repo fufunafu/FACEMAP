@@ -1,0 +1,1062 @@
+{
+ "audits": [
+  {
+   "role": "pm",
+   "summary": "The single-visit experience (capture \u2192 analysis \u2192 save) is polished, but the core differentiating journey \u2014 a practitioner adding a second visit to a patient and running a comparison \u2014 is broken: \"Add visit\" from the patient screen never binds the new case to that patient, so it lands in the Unassigned bucket where it can never be compared against the first visit, and the promised re-bind capability does not exist. Several practitioner-trust features are advertised but inert (Face ID lock, archive recovery, re-binding), and the flagship comparison view both hides behind a multi-select menu and renders surface-displacement deltas with wrong units. The Patients/Capture tab split is the structural root cause: Capture is patient-agnostic by design, which works for ad-hoc demos but contradicts the longitudinal-tracking value proposition that differentiates FaceMap from QOVES.",
+   "findings": [
+    {
+     "title": "\"Add visit\" from a patient never attaches the visit to that patient \u2014 breaks the second-visit comparison journey",
+     "detail": "PatientDetailScreen.swift:89-98 pushes a bare CaptureScreen() with a comment \"binding handled in CaptureScreen save\" that is false: CaptureScreen takes no patient and pushes AnalysisScreen(multiPose:) with no existingCase (CaptureScreen.swift:69-73). The save sheet (AnalysisScreen.swift:442-459) creates a PatientCase with patient == nil, and CaseStore.save (CaseStore.swift:80-84) silently reassigns it to the \"Unassigned\" bucket. Since ComparisonScreen is only reachable via multi-select inside one patient's detail screen, a second visit captured this way can never be compared with the first \u2014 the app's headline value prop (visit-over-visit outcome tracking) dead-ends on first real use.",
+     "severity": "blocker",
+     "recommendation": "Thread the patient through the flow: give CaptureScreen and AnalysisScreen an optional `patient: Patient?` parameter; when present, the save sheet pre-fills/locks the patient, auto-suggests label \"Visit N\", and sets pc.patient before store.save. PatientDetailScreen passes `patient` from \"Add visit\".",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Promised \"re-bind later\" for Unassigned cases does not exist anywhere in the UI",
+     "detail": "The empty-state copy (PatientListScreen.swift:85) tells practitioners \"Cases captured ad-hoc go into an Unassigned bucket you can re-bind later\", but no screen offers a move/re-assign action: PatientDetailScreen's visit rows and AnalysisScreen's toolbar have no \"Move to patient\" option, and CaseStore has no reassign method. Every ad-hoc capture from the Capture tab is permanently stranded in Unassigned, which compounds the Add-visit binding bug \u2014 there is no recovery path even manually.",
+     "severity": "blocker",
+     "recommendation": "Add a \"Move to patient\u2026\" action (context menu on visit rows in PatientDetailScreen and a toolbar item in AnalysisScreen when existingCase != nil) presenting a patient picker plus \"New patient\" inline; implement CaseStore.reassign(_:to:).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Capture session state never resets \u2014 a second capture session can silently mix poses from two different visits",
+     "detail": "CaptureScreen's @State (captures, photos, currentPose) is never cleared after a session completes; there is no reset in handleSnapshot after building the MultiPoseCapture (CaptureScreen.swift:78-96), no .onAppear reset, and no \"start over\"/per-pose retake control anywhere in the flow. Because the Capture tab's NavigationStack keeps the view alive, returning later leaves currentPose at .obliqueR with stale frontal/obliqueL captures; the next snapshot replaces only obliqueR and immediately pushes AnalysisScreen with a frontal mesh from the previous patient \u2014 a clinically dangerous cross-patient data mix. There is also no way to retake a single botched pose mid-flow without finishing all three.",
+     "severity": "high",
+     "recommendation": "Reset all capture state when a MultiPoseCapture is finalized (or on .onAppear when all poses are filled), and add a \"Restart\" button plus per-pose retake (tap a completed segment in the progress bar to recapture that pose).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Face ID lock setting is a no-op \u2014 patient data is not actually protected",
+     "detail": "The \"Lock with Face ID\" toggle (SettingsScreen.swift:7,22-36) promises \"FaceMap re-authenticates with Face ID before opening saved cases\", but `biometricLockEnabled` is read nowhere outside SettingsScreen \u2014 FaceMapApp.swift and DisclaimerGate.swift never evaluate it. A practitioner storing facial meshes and clinical photos of patients on a shared clinic iPad believes the data is biometrically protected when it is not. For a medical-adjacent product this is a trust and likely compliance problem.",
+     "severity": "high",
+     "recommendation": "Enforce the setting: wrap ContentView (inside DisclaimerGate) in a lock view that calls LAContext.evaluatePolicy on launch and on scenePhase .active when biometricLockEnabled is true, blurring content until authenticated.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/FaceMapApp.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Comparison delta table shows surface displacement, expression, and skin metrics with wrong units",
+     "detail": "ComparisonScreen.formatValue (ComparisonScreen.swift:329-336) only special-cases canthal tilt and asymmetry; SurfaceDisplacementMetric (value in meters), ExpressionAsymmetryMetric (unitless ratio), and SkinQualityAnalyzer (texture index) all fall through to the default \"%.1f%%\" branch which multiplies by 100 \u2014 a 2 mm projection deficit renders as \"0.2%\" in the flagship before/after view. AnalysisScreen formats the same metrics correctly (AnalysisScreen.swift:548-556), so visit detail and comparison contradict each other, undermining clinical credibility exactly where the practitioner is judging outcomes.",
+     "severity": "high",
+     "recommendation": "Extract the metric-formatting switch from AnalysisScreen into a shared MetricValueFormatter used by both screens, covering all 8 metric ids.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Archiving is one-way: no archived-patients list, no undo, no delete-patient UI",
+     "detail": "Swipe-to-delete archives a patient (PatientListScreen.swift:32-34) and the detail menu offers \"Archive patient\" (PatientDetailScreen.swift:55-57) with no confirmation; the list query filters archivedAt == nil (PatientListScreen.swift:9), and CaseStore.unarchive / deletePatient (CaseStore.swift:67-76) are never called from any view. An accidental swipe makes a patient's entire visit history vanish with no recovery path and no permanent-delete path either (relevant for data-retention requests).",
+     "severity": "high",
+     "recommendation": "Add an \"Archived\" section or filter in PatientListScreen with Unarchive and Delete (with confirmation) actions, plus a confirmation dialog on archive itself.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No backup or data-export path: device loss destroys every patient record",
+     "detail": "The SwiftData store is deliberately excluded from iCloud/Finder backups (FaceMapApp.swift:33-48), cloud sync is a disabled stub (SettingsScreen.swift:81-89), and there is no export/import of the case database. A practitioner who builds up months of longitudinal data \u2014 the product's whole differentiation \u2014 loses everything if the phone is lost, broken, or replaced. This is the largest adoption blocker for the target buyer and deserves an interim answer before Phase 5 sync.",
+     "severity": "high",
+     "recommendation": "Add an encrypted local export/import (password-protected archive of the store via ShareSheet, restore via file importer) under Settings as a stopgap until cloud sync ships.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/FaceMapApp.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Visit comparison is undiscoverable: hidden behind an ellipsis menu plus a multi-select ritual",
+     "detail": "Reaching ComparisonScreen requires: open patient \u2192 tap ellipsis \u2192 \"Compare visits\" \u2192 enter multi-select \u2192 check exactly two visits \u2192 tap a small \"Compare 2/2\" link (PatientDetailScreen.swift:48-53, 232-239). The most common case \u2014 latest vs. previous visit \u2014 takes six taps and is invisible to a first-time user. For the feature that differentiates FaceMap from 2D competitors, there is no \"Compare with previous visit\" affordance on the latest-visit card, on visit rows, or after saving a second visit.",
+     "severity": "medium",
+     "recommendation": "Add a one-tap \"Compare with previous\" button on the latest-visit card (enabled when \u22652 visits exist) and a swipe/context-menu action on visit rows; keep multi-select for arbitrary pairs.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No exportable before/after report \u2014 comparison results are trapped on screen",
+     "detail": "PDF export exists only on AnalysisScreen for a single saved visit (AnalysisScreen.swift:380-387, 510-519), and TreatmentPlanPDF is already stale (predates photos, region changes, skin metric). ComparisonScreen \u2014 containing the before/after photos, region projection changes, and metric deltas a practitioner would actually show a patient or keep in the chart \u2014 has no share/export at all. The before/after artifact is the single most valuable deliverable in aesthetic-medicine workflows.",
+     "severity": "medium",
+     "recommendation": "Add a ComparisonReportPDF (side-by-side photos, region changes table, metric deltas) with a share button in ComparisonScreen's toolbar; fold the TreatmentPlanPDF refresh (photos, skin metric, all 8 metrics) into the same work item.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Visits can never be deleted or relabeled \u2014 a botched capture pollutes the timeline and trends forever",
+     "detail": "CaseStore.delete(patientCase:) (CaseStore.swift:93-98) is never invoked from any view; visit rows in PatientDetailScreen have no swipe actions or context menu, and PatientCase.label is never editable after the save sheet. A mis-capture (wrong patient in frame, bad mesh) permanently distorts the trend strip (PatientDetailScreen.swift:157-223) and sparklines, and a typo in the visit label is uncorrectable.",
+     "severity": "medium",
+     "recommendation": "Add swipe-to-delete (with confirmation) and a \"Rename visit\" context-menu action on visit rows in PatientDetailScreen.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Patients/Capture tab split is structurally confusing: Capture is patient-agnostic and the save sheet conflates label with patient code",
+     "detail": "The Capture tab (ContentView.swift:9-10) produces cases with no patient context, then the save sheet's field is literally titled \"Patient code (no PII)\" with example \"P-014 Visit 2\" (AnalysisScreen.swift:430-432) \u2014 but the text is stored as a case *label* and the case goes to Unassigned regardless of what code is typed. A practitioner who types \"P-014 Visit 2\" reasonably expects the case to appear under patient P-014. Two parallel mental models (patient-first via Patients tab vs. capture-first via Capture tab) converge on a save flow that honors neither.",
+     "severity": "medium",
+     "recommendation": "Replace the free-text field with a patient picker (existing patients + \"New patient\" + \"Unassigned\") and a separate optional visit-label field defaulting to \"Visit N\"; retitle the field so 'label' and 'patient code' are never conflated.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ContentView.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No structured treatment record per visit \u2014 the outcome-tracking loop has no 'what was done' half",
+     "detail": "FaceMap measures the face before and after, but a filler practitioner tracking outcomes needs to record the intervention: product, region(s) injected, units/volume, date of treatment. Today the only vehicle is the free-text visit notes sheet (AnalysisScreen.swift:468-505), and patient-level notes exist in the model (Patient.swift:16) but have no UI at all. Without a treatment record, the Comparison screen shows projection changed +1.2 mm but cannot answer \"after what?\" \u2014 which is the question the practitioner is paying to answer, and a clear moat versus QOVES's measurement-only scoring.",
+     "severity": "medium",
+     "recommendation": "Add a lightweight structured \"Treatment\" entry per visit (region picker from FacialRegion, product free-text, volume in ml) stored on PatientCase and surfaced in ComparisonScreen between visits A and B; also surface Patient.notes in PatientDetailScreen.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/Patient.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift"
+     ],
+     "wave2Candidate": false
+    },
+    {
+     "title": "Stale in-app copy contradicts the current product: v0.2.0 footer, 'four-domain' framework with five domains, 'metrics arrive in v0.3', 'Phase 2' sync",
+     "detail": "MoreTab.swift:48 shows \"v0.2.0\" while the app is at v0.5; MoreTab.swift:90 headlines \"THE FOUR-DOMAIN FRAMEWORK\" then iterates all five FaceDomain cases; AnalysisScreen.swift:254 promises missing-domain metrics \"arrive in v0.3\" (already shipped era); SettingsScreen.swift:84 says cloud sync is \"Coming in Phase 2\" while the roadmap says Phase 5. Individually small, together they read as an unmaintained product to a paying clinician evaluating trustworthiness \u2014 and the \"v0.3\" footnote actively misinforms.",
+     "severity": "low",
+     "recommendation": "Sweep copy: read version from Bundle (CFBundleShortVersionString), rename to \"five-domain framework\", replace the v0.3 footnote with neutral \"not yet measured for this capture\", align the sync phase wording.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Search covers only patient codes \u2014 no case search across visit labels or notes",
+     "detail": "PatientListScreen's search filters on patient.code only (PatientListScreen.swift:71-75). A practitioner who remembers \"the chin filler case from March\" or text they wrote in notes cannot find it; visit labels and clinician notes are unsearchable, and there is no global case search. With pseudonymous codes as the only identifier, recall depends entirely on memorizing codes \u2014 a real workflow gap at >20 patients.",
+     "severity": "low",
+     "recommendation": "Extend the filter to match visit labels and notes (patient matches if any case matches), and show matching-visit subtitles in results.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift"
+     ],
+     "wave2Candidate": true
+    }
+   ],
+   "deviceTestScript": "# FaceMap On-Device Test Script (PM journey verification)\n\nDevice: iPhone with TrueDepth (X or newer), app freshly installed.\n\n## 1. First run\n1. Launch FaceMap. Confirm the disclaimer gate appears; tap \"I am a licensed practitioner \u2014 continue\".\n2. Confirm you land on the Patients tab with the empty state. Note the copy promising an \"Unassigned bucket you can re-bind later\".\n\n## 2. Patient-first journey (the blocker)\n3. Tap \"Add patient\", create code `P-001`.\n4. Open P-001 \u2192 tap \"Add visit\" \u2192 complete the 3-pose capture (frontal, oblique L, oblique R).\n5. On the Analysis screen tap Save, enter label `Visit 1`, save.\n6. EXPECTED BUG: go back to P-001's detail screen \u2014 it still says \"No visits yet\". Return to the Patients list: a patient named \"Unassigned\" now exists and contains Visit 1.\n7. Try to find any way to move Visit 1 from Unassigned to P-001 (long-press the visit row, check Analysis toolbar, check menus). EXPECTED: none exists.\n\n## 3. Stale capture state (cross-visit mixing)\n8. Go to the Capture tab. Complete a full 3-pose session and reach Analysis WITHOUT saving; go back.\n9. Re-enter the Capture flow and let it auto-capture once. EXPECTED BUG: it captures only Oblique R and immediately jumps to Analysis using the frontal mesh from the PREVIOUS session.\n\n## 4. Comparison journey\n10. Under the Unassigned patient (or P-001 if you worked around step 6), save a second visit.\n11. In patient detail: tap ellipsis \u2192 \"Compare visits\" \u2192 select both visits \u2192 \"Compare 2/2\". Note how many taps this took.\n12. In the CHANGES table, find \"Surface displacement\". EXPECTED BUG: value shown as a tiny percentage (e.g. \"0.2%\") instead of mm.\n13. Look for any share/export button on the Compare screen. EXPECTED: none.\n\n## 5. Settings traps\n14. More \u2192 Settings \u2192 enable \"Lock with Face ID\" (authenticate). Force-quit and relaunch the app. EXPECTED BUG: app opens straight to patient data with no Face ID prompt.\n15. Patients list: swipe-archive a patient. Try to find/restore it anywhere. EXPECTED: impossible.\n\n## 6. Copy check\n16. More tab footer should read v0.2.0 (stale); About screen says \"FOUR-DOMAIN\" above five listed domains; Settings sync says \"Phase 2\"."
+  },
+  {
+   "role": "ux",
+   "summary": "FaceMap's screens are visually polished, but the core clinical workflow has two structural UX breaks: a visit captured via a patient's \"Add visit\" button is silently saved to the \"Unassigned\" bucket (with no re-bind UI despite the empty state promising one), and the three-pose CaptureScreen never resets after a completed session, so a second capture in the same app run silently reuses stale poses. Error feedback is almost entirely absent \u2014 denied camera permission, SwiftData save failures, undecodable cases, and PDF generation failures all degrade silently into misleading or dead UI. Copy is inconsistent with the product's own framework (a \"FOUR-DOMAIN\" header over five FAS facets, stale v0.2/v0.3 strings, a disclaimer that points to a calibration path that does not exist), which undermines the clinical credibility that differentiates FaceMap from QOVES.",
+   "findings": [
+    {
+     "title": "\"Add visit\" from a patient never binds the captured case to that patient; it lands in Unassigned with no re-bind UI",
+     "detail": "PatientDetailScreen.swift:89-96 pushes CaptureScreen() with no patient parameter (the onDisappear comment 'binding handled in CaptureScreen save' is wrong \u2014 CaptureScreen.swift has no patient state). The save sheet in AnalysisScreen.swift:442-459 creates a PatientCase with no patient, and CaseStore.swift:80-83 assigns it to the 'Unassigned' bucket. So a practitioner who taps 'Add visit' on P-014, captures, and saves will find the visit missing from P-014's timeline. Worse, the empty state at PatientListScreen.swift:85 promises 'an Unassigned bucket you can re-bind later', but a repo-wide grep shows no re-bind/move-case UI exists anywhere. Clinical outcome tracking \u2014 the product's differentiator \u2014 is broken end-to-end for this primary flow.",
+     "severity": "blocker",
+     "recommendation": "Thread an optional `patient: Patient?` through CaptureScreen \u2192 AnalysisScreen \u2192 PatientCase init so 'Add visit' saves directly to that patient (pre-fill/skip the label sheet's patient-code semantics). Separately add a 'Move to patient\u2026' action on visit rows (context menu or in AnalysisScreen toolbar) so Unassigned cases can actually be re-bound, or remove the promise from the empty-state copy.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "CaptureScreen never resets after a completed three-pose session \u2014 second capture reuses stale poses",
+     "detail": "CaptureScreen.swift:19-23 holds `currentPose`, `captures`, and `photos` as @State with no reset in onAppear and no reset after handleSnapshot completes the sequence (CaptureScreen.swift:78-96). After saving and popping back, the screen sits at obliqueR with a full progress bar; the next snapshot re-fires the completion branch (line 87-95) and builds a new MultiPoseCapture mixing the OLD frontal/obliqueL with a NEW obliqueR \u2014 silently producing a clinically invalid visit. There is also no 'retake' affordance mid-flow if a pose was captured badly (auto-capture fires after only 0.6s in-window, line 27, so accidental captures are likely).",
+     "severity": "blocker",
+     "recommendation": "Reset currentPose/captures/photos/poseInWindowSince in .onAppear (or after navigateToAnalysis fires), and add a per-pose 'Retake' control (e.g. tapping a completed segment in the progress bar restarts that pose) plus a 'Start over' button.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Denied camera permission leaves the user stuck on 'Position your face in front of the camera' forever",
+     "detail": "FaceCaptureView.swift never checks AVCaptureDevice.authorizationStatus and the Coordinator implements no session(_:didFailWithError:) (FaceCaptureView.swift:41-62, 111-128). When camera access is denied, ARSession fails, no frames arrive, trackingState stays .noFace, and CaptureScreen.swift:172 shows 'Position your face in front of the camera' indefinitely \u2014 actively misleading feedback with no path to Settings. Same dead-end for any other AR session failure (sensor in use, thermal shutdown).",
+     "severity": "high",
+     "recommendation": "Add an ARSessionDelegate didFailWithError handler and a pre-flight AVCaptureDevice.authorizationStatus(for: .video) check; introduce a .permissionDenied / .sessionFailed TrackingState that CaptureScreen renders as an explanatory card with a 'Open Settings' button (UIApplication.openSettingsURLString).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Save failures are invisible: the save sheet always dismisses as if the case was persisted",
+     "detail": "AnalysisScreen.swift:456-458 calls store.save(pc) then unconditionally dismisses both the sheet and the screen. CaseStore.swift:85-91 catches the SwiftData error and only logs it \u2014 the practitioner sees a successful-looking dismissal while the visit silently vanished. Notes and annotation edits use bare `try? store.context.save()` (AnalysisScreen.swift:142, 170) with the same silent-loss behavior. For a clinical record-keeping app, unacknowledged data loss is the worst possible failure mode (this deepens the known '33 silent try? sites' gap with the specific user-facing consequence).",
+     "severity": "high",
+     "recommendation": "Make CaseStore.save (and a saveContext helper) return Result/throw; on failure keep the sheet open and show an alert ('Could not save this visit \u2014 try again'). Apply the same pattern to notes/annotation persistence with a lightweight toast or retry alert.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "First-run experience never explains FAS/AART-HIT, the wheel, or the metric jargon at point of use",
+     "detail": "After the disclaimer gate, the new user lands on an empty patient list and then a camera with yaw-degree prompts; nothing introduces the five-facet Facial Assessment Scale that organizes the entire product. 'FAS' appears only in code comments (FaceDomain.swift:3-9, FASRow.swift:3) \u2014 never in any UI string. The first AnalysisScreen the user sees is dense with unexplained notation: 'worst |\u0394 from \u03c6| %', 'worst Z-deficit mm', 'min \u00b0(target \u2026)' (AnalysisScreen.swift:536-560), and the AestheticWheel has no legend or tap-to-explain. The only framework explanation is buried under More \u2192 'About Dr Andreas Nikolis' (MoreTab.swift:90-123). Compared with QOVES's consumer-simple output, FaceMap's clinical depth reads as noise on first contact.",
+     "severity": "high",
+     "recommendation": "Add a 2-3 card first-run intro after the disclaimer (what FAS is, what the wheel shows, the 3-pose capture + calibrate-once flow), name the scale in the Analysis header or wheel ('FAS facets'), and give each metric row an info affordance reusing the existing per-metric blurbs from AboutScreen.domainBlurb.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/AestheticWheel.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Disclaimer instructs a calibration path that does not exist, and a new user cannot calibrate at all before their first capture",
+     "detail": "DisclaimerCopy.swift:15-17 says calibrate via 'More \u2192 Calibrate landmarks', but the More tab item (MoreTab.swift:28-33, labeled 'Landmark calibration') opens only a read-only explainer; actual calibration lives behind the unlabeled scope icon in the Analysis toolbar (AnalysisScreen.swift:389-397) and requires an already-captured face (CalibrationScreen.swift:8 takes `face: CapturedFace`). So the very first thing the app tells the user to do is impossible until after they have captured a case whose results the warning banner simultaneously declares 'not clinically meaningful' (DisclaimerCopy.swift:27-29). The explainer's step list (MoreTab.swift:142-148) is the only place the scope icon is ever named.",
+     "severity": "high",
+     "recommendation": "Fix the disclaimer copy to describe the real path; add a 'Calibrate now' button on the CalibrationExplainerScreen that launches a throwaway capture for calibration purposes; consider a labeled 'Calibrate' row in the uncalibrated warning banner flow rather than relying on the toolbar scope glyph.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Resources/DisclaimerCopy.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CalibrationScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Compare \u2014 a flagship differentiator \u2014 is buried three interactions deep behind an ellipsis menu",
+     "detail": "Visit-over-visit comparison is reachable only via PatientDetailScreen's toolbar ellipsis \u2192 'Compare visits' \u2192 multi-select mode \u2192 a small 'Compare 2/2' text button that is disabled until exactly two rows are checked (PatientDetailScreen.swift:43-62, 229-239). Nothing on the screen advertises that comparison exists; a practitioner with 2+ visits gets no prompt. The fallback navigationDestination branch 'Pick exactly two visits to compare.' (PatientDetailScreen.swift:69) is a dead-end debug string that should be unreachable but ships as UI copy.",
+     "severity": "high",
+     "recommendation": "Surface a prominent 'Compare latest two visits' button on PatientDetailScreen whenever sortedCases.count >= 2 (pre-selecting the two most recent), keep multi-select for arbitrary pairs, and remove the unreachable fallback text.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Terminology contradiction: 'THE FOUR-DOMAIN FRAMEWORK' header lists five facets, and the bio copy names four completely different domains",
+     "detail": "AboutScreen renders 'THE FOUR-DOMAIN FRAMEWORK' (MoreTab.swift:90) directly above a ForEach over FaceDomain.allCases, which has five cases (skinQuality, facialShape, proportions, symmetry, expression \u2014 MoreTab.swift:115-123, FaceDomain.swift). The DisclaimerCopy.aboutNikolis text shown immediately above it (DisclaimerCopy.swift:36-46) describes a different taxonomy entirely \u2014 'Mechanical behaviour, Optical properties, Symmetry & proportions, Structural volume \u2026 four-domain analysis' \u2014 which matches nothing in the UI. For an app whose credibility rests on the published FAS framework, the About screen contradicting itself within one scroll is damaging. A vestige of the pre-migration enum (see commit 5279c57).",
+     "severity": "high",
+     "recommendation": "Update the header to 'THE FIVE FAS FACETS' (or similar) and rewrite aboutNikolis to describe the actual five-facet Facial Assessment Scale; flag the bio for Dr Nikolis review since the file comment marks it placeholder.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Resources/DisclaimerCopy.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/FaceDomain.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Save sheet conflates patient code with visit label, guaranteeing user confusion about where data goes",
+     "detail": "The AnalysisScreen save sheet's TextField placeholder is 'Patient code (no PII)' but the footer example is 'P-014 Visit 2' and the value is stored as the case *label*, not a patient binding (AnalysisScreen.swift:430-433, 447-455). A user typing 'P-014 Visit 2' will reasonably expect the visit to appear under patient P-014; instead it appears under 'Unassigned' with that string as its name. Even after the patient-binding fix (finding 1), ad-hoc captures from the Capture tab will keep this sheet, so the field must be honest about being a visit label.",
+     "severity": "medium",
+     "recommendation": "Rename the field to 'Visit label' with footer 'e.g. \"Visit 2 \u2014 pre-treatment\"', and add an explicit patient picker (defaulting to Unassigned) to the save sheet so the destination is visible at save time.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Undecodable saved cases render as a dimmed, untappable row with zero explanation",
+     "detail": "PatientCase.capturedFace returns nil on any JSON decode failure (PatientCase.swift:88). PatientDetailScreen.swift:268-270 then renders the visit row at opacity 0.5 with no NavigationLink and no message \u2014 the practitioner sees a ghost row that does nothing when tapped, with no indication the underlying mesh data is unreadable or what to do about it. ComparisonScreen handles the same condition better with placeholderMesh (ComparisonScreen.swift:113-114), but its region-change .task silently skips analysis when either face is nil (ComparisonScreen.swift:38-43), leaving the region-change section to communicate absence implicitly.",
+     "severity": "medium",
+     "recommendation": "Replace the opacity-0.5 treatment with an explicit 'Mesh data unavailable' badge on the row and allow opening a degraded detail view (metrics/notes still decode independently); in ComparisonScreen show an inline note when region-change analysis was skipped because a mesh failed to load.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "PDF export fails silently \u2014 tapping the share icon can simply do nothing",
+     "detail": "AnalysisScreen.exportPDF (AnalysisScreen.swift:510-519) has two silent guard-return paths: missing patient and TreatmentPlanPDF.generate returning nil. The user taps the export toolbar button and nothing happens \u2014 no spinner, no error. Given TreatmentPlanPDF is known-stale (predates photos/region-changes/new metrics), generate-failure is a live risk, and PDF rendering of a 600x400 mesh snapshot plus generation runs synchronously on the main actor with no progress indication even on success.",
+     "severity": "medium",
+     "recommendation": "Show an alert on either failure path ('Could not generate the PDF for this visit'), and add a brief progress overlay while generating; log the underlying reason for support.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "AnalysisScreen has no loading state while metrics and skin-quality analysis compute; pose switching shows stale results",
+     "detail": "evaluateMetrics is async and includes the photo-based SkinQualityAnalyzer (AnalysisScreen.swift:415-422). On first appearance `results` is empty so the entire 'FINDINGS BY DOMAIN' section is simply absent (findingsSection guard at AnalysisScreen.swift:203) \u2014 the screen looks finished-but-empty, then content pops in. On pose change (AnalysisScreen.swift:150-154) the previous pose's results remain on screen until the recompute lands, so for a beat the findings list mismatches the displayed mesh \u2014 a subtle but real clinical-trust problem.",
+     "severity": "medium",
+     "recommendation": "Add an isEvaluating state: show a 'Analyzing\u2026' placeholder card on first load and dim/overlay the findings list (or clear results) during pose-switch recomputes so stale numbers are never presented against the wrong mesh.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Stale version and roadmap strings ship in user-facing copy: 'v0.2.0', 'metrics arrive in v0.3', 'Coming soon'",
+     "detail": "The More tab footer hard-codes 'FaceMap by Dr Andreas Nikolis \u00b7 v0.2.0' (MoreTab.swift:48) while the app is at v0.5. AnalysisScreen's unpopulated-domain footnote says '<domains> metrics arrive in v0.3.' (AnalysisScreen.swift:254) \u2014 a promise about a release that already shipped, shown beneath every analysis. PatientDetailScreen trend cards show 'Coming soon' for empty domains (PatientDetailScreen.swift:180) even when the real reason is the patient's visits predate those metrics. Stale roadmap copy in a clinical tool erodes confidence in the measurements themselves.",
+     "severity": "medium",
+     "recommendation": "Read the version from Bundle (CFBundleShortVersionString) instead of hard-coding; change the footnote to a factual 'No <domain> metrics for this capture' and the trend card to 'No data yet'.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Patient creation allows duplicate and 'Untitled' codes with no validation feedback",
+     "detail": "CaseStore.createPatient silently substitutes 'Untitled' for whitespace-only codes (CaseStore.swift:54-59) and nothing checks for duplicate codes, so two 'P-014' patients can coexist, and the rename sheet (PatientDetailScreen.swift:327-353) has the same gap. Because patients are identified solely by pseudonymous code (no PII by design), duplicate codes are indistinguishable in the list \u2014 a real mis-filing risk in a clinic. Search has no 'no results' empty state either: filtering to zero matches shows a bare list with just the section header (PatientListScreen.swift:24-47).",
+     "severity": "low",
+     "recommendation": "On create/rename, check for an existing active patient with the same trimmed code and show inline 'This code is already in use'; add a simple 'No patients match \"<query>\"' empty view for the search case.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Archive via swipe is instant and unexplained, with no undo and no way to view archived patients",
+     "detail": "PatientListScreen.swift:32-34 archives on swipe-delete with no confirmation and no undo toast; the iOS swipe action will display the default 'Delete' label/red styling even though the action is an archive, and the footer hint 'Swipe a row to archive' (PatientListScreen.swift:38) is the only disclosure. CaseStore has unarchive() (CaseStore.swift:67-70) but no screen ever lists archived patients, so an accidental swipe makes a patient and their entire visit history unreachable forever from the UI.",
+     "severity": "medium",
+     "recommendation": "Use a custom .swipeActions labeled 'Archive' (non-destructive tint), show an 'Archived \u2014 Undo' toast, and add an 'Archived patients' section/screen (e.g. under More) that exposes unarchive.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "wave2Candidate": true
+    }
+   ],
+   "deviceTestScript": "# FaceMap On-Device UX Test Script (TrueDepth iPhone required)\n\n## A. First run\n1. Delete the app if installed; install a fresh build and launch.\n2. Confirm the disclaimer screen appears; read the calibration paragraph, then tap \"I am a licensed practitioner \u2014 continue\".\n3. **Check:** You land on an empty Patients list. Note whether anything explains FAS, the wheel, or the 3-pose capture (expected finding: nothing does).\n4. Follow the disclaimer's instruction literally: go to More \u2192 \"Landmark calibration\". **Check:** it is only an explainer \u2014 you cannot actually calibrate from here.\n\n## B. Camera permission failure\n5. Go to the Capture tab; when iOS asks for camera access, tap **Don't Allow**.\n6. **Check (bug):** the screen says \"Position your face in front of the camera\" forever, with no error or Settings link.\n7. Re-enable camera in iOS Settings \u2192 FaceMap before continuing.\n\n## C. Patient + Add visit binding (blocker)\n8. Patients tab \u2192 + \u2192 create patient `P-001`.\n9. Open P-001 \u2192 tap **Add visit** \u2192 complete the coached frontal/oblique-L/oblique-R capture \u2192 on the Analysis screen tap **Save**, enter `P-001 Visit 1`, save.\n10. **Check (bug):** return to P-001's detail screen \u2014 the visit is NOT in the timeline. Go back to Patients: an \"Unassigned\" patient now holds the visit.\n11. Try to move that visit to P-001. **Check (bug):** there is no way to do it.\n\n## D. Capture state reuse (blocker)\n12. Without relaunching the app, go to the Capture tab again.\n13. **Check (bug):** the progress bar already shows completed poses. Capture one pose; you are taken straight to a \"new\" analysis built from the previous session's frontal capture mixed with the new pose.\n14. Relaunch the app to clear the state.\n\n## E. Analysis screen feedback\n15. Open a saved visit. **Check:** note the gap before \"FINDINGS BY DOMAIN\" appears (no loading indicator), and whether the metric strings (|\u0394 from \u03c6|, Z-deficit) are explained anywhere.\n16. Switch poses with the F/L/R pills quickly. **Check:** whether the findings list briefly shows the previous pose's numbers.\n17. Tap the share (export) icon on a visit. If a PDF appears, check it for the photos and new metrics (expected stale). If nothing happens at all, that is the silent-failure bug.\n\n## F. Compare discoverability\n18. Capture and save a second visit for any patient (via Unassigned if needed).\n19. On the patient detail screen, find how to compare two visits without hints. **Check:** it requires ellipsis menu \u2192 \"Compare visits\" \u2192 check two rows \u2192 small \"Compare 2/2\" button.\n\n## G. Copy checks\n20. More tab footer: **Check** version string says v0.2.0 (stale).\n21. More \u2192 About Dr Andreas Nikolis: **Check** \"THE FOUR-DOMAIN FRAMEWORK\" header sits above a list of FIVE facets, and the bio paragraph names four different domains (Mechanical/Optical/Symmetry/Structural).\n22. On any analysis with missing domains, **check** for the \"...metrics arrive in v0.3.\" footnote.\n\n## H. Archive safety\n23. On the Patients list, swipe a patient row. **Check:** the action label/color (likely red \"Delete\" for what is actually an archive), no confirmation, no undo, and no screen anywhere to find archived patients afterward."
+  },
+  {
+   "role": "design",
+   "summary": "The design system core (Theme.swift, Typography.swift) is well-conceived \u2014 light chrome, domain-hue severity ramps, serif/mono pairing \u2014 but adoption is leaky: three whole screens use zero Theme tokens, components invent micro font sizes the scale lacks, and domain hues are repeatedly repurposed as status colors, eroding the wheel's color semantics. The biggest brand risks are (a) iOS and web assign the same hex values to different FAS facets, so the identity contradicts itself across platforms, and (b) the aesthetic wheel paints two facets (Skin Quality + Expression) into the same quadrant with overlapping labels and an unreachable tap target. The PDF is the weakest deliverable for a practitioner-facing product: it predates clinical photos, region-projection tracking, and the new metrics, mis-formats non-ratio metric units, and uses an ad-hoc 14-size type ramp with 8pt body text.",
+   "findings": [
+    {
+     "title": "iOS and web disagree on which color means which FAS facet",
+     "detail": "Web facetHues (web/lib/tokens.ts:36-41) define skinQuality=#C9BBEE (lavender), proportions=#7A8094 (slate), expression=#F2C9A1 (peach). iOS Theme.swift:31-36 defines skinQuality=0x7A8094 (slate), expression=0xC9BBEE (lavender), proportions=0x9AB2D6 (a soft blue that exists nowhere on the web), and has no peach at all. So lavender means 'skin quality' on the marketing site but 'expression' in the app, and slate flips between 'proportions' and 'skin quality'. LogoMark.swift:25-30 and web/components/brand-mark.tsx:13-16 consequently render differently-ordered quadrants. For a brand whose entire identity is the facet wheel, the same hue meaning two different clinical facets across touchpoints is a real credibility problem \u2014 a practitioner who reads the site then opens the app gets contradictory color legends, and the PDF (which patients may compare against facemap.app) inherits the iOS mapping.",
+     "severity": "high",
+     "recommendation": "Declare web facetHues the source of truth (it has a complete 5-hue set including peach #F2C9A1). Update Theme.swift: domainSkinQuality=0xC9BBEE, domainFacialShape=0xA6B4DD (unchanged), domainProportions=0x7A8094 (+ keep 0x3F4456 as its fill), domainSymmetry=0xE9B5E0 (unchanged), domainExpression=0xF2C9A1. Update LogoMark.swift slice order to match brand-mark.tsx, and add a comment in both files pointing at the other as the mirror. Single PR, mechanical change.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Theme.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/lib/tokens.ts",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/LogoMark.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/components/brand-mark.tsx"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Aesthetic wheel double-books the top-left quadrant: Skin Quality and Expression overlap",
+     "detail": "AestheticWheel.swift:196-207 maps both .skinQuality and .expression to the (180,270) quadrant. Consequences: (1) both quadrant gradient fills are painted into the same sector (drawWheel loop at :53-67), so whichever facet comes later in FaceDomain.allCases overpaints the other; (2) labelOverlay (:156-171) positions 'SKIN QUALITY' and 'EXPRESSION' at the identical midAngle point, rendering them on top of each other as unreadable text \u2014 this also appears in the patient-facing PDF (TreatmentPlanPDF.swift:144 renders the wheel with showsLabels: true); (3) domain(forAngle:) at :219-228 always resolves the quadrant tap to .skinQuality, so the Expression domain detail is unreachable from the wheel. The code comment at :197-199 acknowledges a 5-sector layout is a v0.6 follow-up \u2014 this deepens it: it is not just a layout nicety, it is overlapping text in the exported clinical document and a dead navigation path.",
+     "severity": "high",
+     "recommendation": "Implement the 5-sector wheel now: 72\u00b0 sectors, anchored so Skin Quality starts at 12 o'clock and order matches the web FAS presentation; update quadrantBoundsDegrees, domain(forAngle:), and label placement (labels will need slight radial offset or curved baseline at 72\u00b0 spacing). Keep the 3-ring severity geometry untouched. Update LogoMark to a 5-slice mark in the same pass (see icon brief) so wheel, logo, and web stay congruent.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/AestheticWheel.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No status colors in Theme, so screens steal domain hues for success/warning/error \u2014 corrupting the color language",
+     "detail": "Theme.swift deliberately avoids a red/amber/green ramp (comment at Theme.swift:5-6), but provides no semantic status tokens at all. Result: (1) CaptureScreen.swift:133 and :163 use Theme.domainSymmetry (magenta-pink) for both the 'current pose' chip and the 'unsupported device' badge \u2014 pink simultaneously means 'Symmetry facet', 'you are here', and 'hardware error'; (2) ComparisonScreen.swift:202 uses Theme.domainSymmetry for 'projection lost'; (3) CalibrationWarningBanner.swift:11-29 hardcodes four amber hexes (0xB45309, 0x78350F, 0xFEF3C7) that exist nowhere in Theme; (4) TreatmentPlanPDF.swift:235-238 hardcodes a different amber (Color(red:0.47...) / Color(red:1.0,0.95,0.78)) for the same calibration warning, so app banner and PDF strip don't even match each other; (5) CalibrationScreen.swift:150 and RegionCalibrationScreen.swift:156 fall back to system .green for 'picked'. In a clinical tool where the wheel's pastel hues carry diagnostic meaning, reusing them for status destroys that meaning.",
+     "severity": "high",
+     "recommendation": "Add to Theme: warning (0xB45309), warningBg (0xFEF3C7), warningInk (0x78350F), positive (a desaturated green, e.g. 0x3E7C4F), negative (a desaturated brick, e.g. 0x9B3B2E) \u2014 chosen to sit outside the five pastel facet hues. Migrate the five call sites above plus the PDF warning strip to these tokens. Forbid domain hues for non-domain meaning via a code comment in Theme.swift.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Theme.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/CalibrationWarningBanner.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Three screens bypass the design system entirely (zero Theme/Type tokens)",
+     "detail": "CalibrationScreen.swift, RegionCalibrationScreen.swift, and MeshFullScreen.swift contain no reference to Theme or Type at all (verified by grep across FaceMap/UI). They use system .headline/.callout/.caption fonts (CalibrationScreen.swift:142-150, RegionCalibrationScreen.swift:148-174, MeshFullScreen.swift:33,66,78), system .secondary foreground, system .bordered/.borderedProminent buttons (CalibrationScreen.swift:154-171) which render iOS-default blue, raw Color.cyan as a toggle-active color (CalibrationScreen.swift:121), and .regularMaterial cards. These are practitioner-facing setup screens, not debug UI \u2014 they currently look like a different app (default blue buttons and cyan accents against FaceMap's near-black-ink/pastel identity). The serif metric voice and PrimaryButton/SecondaryButton styles (Buttons.swift) are simply absent here.",
+     "severity": "medium",
+     "recommendation": "Migrate the three screens to Type.* fonts, Theme ink/surface tokens, and the existing PrimaryButton/SecondaryButton styles; replace Color.cyan with Theme.ink-on-material or the new warning/positive tokens; replace .green 'picked' confirmation with the new positive token. Mesh-viewport overlays may keep white-on-black per the meshCanvas spotlight rule, but should still use Type sizes.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CalibrationScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/RegionCalibrationScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MeshFullScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Type scale lacks micro sizes, so even DesignSystem components hardcode fonts",
+     "detail": "Typography.swift bottoms out at 11pt (sectionHeader) and 12pt (caption). But the UI needs 9-10pt labels constantly, so components invent them inline: AestheticWheel.swift:167,178 (9pt), DomainBadge.swift:15 (10pt), SummaryHeader.swift:46 (10pt), BrandMark.swift:54 (9pt), CaptureScreen.swift:137 (9pt), MetricRow.swift:35 and CategoryRow.swift:60 (12pt semibold duplicating captionStrong), Buttons.swift:6,22 (16pt medium \u2014 a button size missing from the scale), MeshFullScreen.swift:33 (14pt semibold). Roughly 50 .font(.system(size:...)) call sites exist outside Typography.swift. None of these can participate in Dynamic Type either, since the whole scale uses fixed sizes rather than relativeTo: metrics \u2014 a secondary but real accessibility concern for 40-60-year-old practitioners.",
+     "severity": "medium",
+     "recommendation": "Add to Type: micro (9pt semibold, tracked \u2014 wheel/diagram labels), labelSmall (10pt semibold \u2014 badges), button (16pt medium), control (14pt semibold \u2014 overlay chips). Sweep the ~50 call sites to tokens (mechanical). As a follow-up, rebuild the scale with Font.system(size:relativeTo:) for Dynamic Type support.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Typography.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/Buttons.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/AestheticWheel.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/DomainBadge.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "PDF report is stale and structurally wrong for the v0.5 feature set; v2 layout spec",
+     "detail": "TreatmentPlanPDF.swift renders one fixed A4 page (TreatmentPlanPDF.swift:30-38 only ever begins one PDF page). Problems as a patient-handout: (1) clinical photos exist (PatientCase.photos, saved at AnalysisScreen.swift:454) but the report shows only a black mesh snapshot (:128-141) \u2014 a wireframe face is alienating to patients; the frontal photo is the single most persuasive artifact a practitioner can hand over; (2) region-projection changes (SurfaceChangeAnalyzer / ComparisonScreen) \u2014 the product's core differentiator vs QOVES \u2014 are absent; (3) metric list is unbounded (:155-159) and the layout relies on a Spacer (:81) before the signature block, so 7 metrics + pins + notes will silently compress or collide rather than paginate; (4) formatPDFValue (:287-297) special-cases only canthal tilt and asymmetry, so the new surface-displacement and expression-asymmetry metrics fall into the default '%.1f%% (\u2264 %.0f%%)' branch and print wrong units in a signed clinical document; (5) the wheel is rendered with showsLabels:true at 200pt inside a 220pt slot \u2014 labelOverlay places text at radius*1.02 (AestheticWheel.swift:158), outside the declared frame, so labels clip in the rendered PDF; (6) no photo/identity area means the document fails the basic 'is this me' test for the patient.",
+     "severity": "high",
+     "recommendation": "v2 layout, two pages, loop context.beginPDFPage per page: PAGE 1 (patient-facing): header (brandmark, practitioner, patient code, visit date); 3-up clinical-photo triptych (oblique L / frontal / oblique R, ~160pt tall, 6pt radius, captions); aesthetic wheel (5-sector, labels with proper bleed margin) beside a 'Key findings' box of the top 3 non-normal metrics in plain language; signature block. PAGE 2 (clinical detail): metric table grouped by FAS facet with facet hue tab on each group, per-metric unit-correct formatting (move formatting onto the metric type, not a switch in the PDF); 'Change since last visit' section listing region projection deltas with the \u00b10.3mm noise-floor note when a prior visit exists; annotation pins; notes; calibration strip and footer disclaimer on both pages. Add a metric-count overflow rule (continue table to page 3) instead of Spacer-crush.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/PDFTheme.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "PDF has no type scale \u2014 14 ad-hoc font sizes, body text at 8-9pt",
+     "detail": "TreatmentPlanPDF.swift hardcodes .system(size:) at 28, 12, 10, 9, 8pt across ~15 call sites (e.g. :101, :105, :111-118, :191-201, :230-232, :249, :267-271, :282) with no PDFType companion to PDFTheme. Footer disclaimer and the calibration warning render at 8pt \u2014 at A4/72dpi that is below comfortable print legibility, and the legally-significant disclaimer is the smallest text on the page. Metric values (the clinical payload) are 9pt while the wordmark is 28pt. PDFTheme.swift covers only colors and page geometry (PDFTheme.swift:5-18). The app's serif-for-metric-names convention (Type.metricName) is also dropped in the PDF, so the handout doesn't carry the product's typographic voice.",
+     "severity": "medium",
+     "recommendation": "Add a PDFType enum to PDFTheme.swift: display 24 serif tracked, sectionHeader 9 semibold tracked, body 10, metricName 10.5 serif, value 10 mono, caption 9, legal 8.5 minimum. Migrate all .system(size:) calls in TreatmentPlanPDF.swift; bump disclaimer to at least 8.5-9pt and metric values to 10pt mono.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/PDFTheme.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "App icon: design brief + Assets.xcassets build spec (currently nonexistent, pbxproj references it)",
+     "detail": "No .xcassets exists anywhere in the repo (verified by find), yet both build configs set ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon (FaceMap.xcodeproj/project.pbxproj:729 and :746), so the app ships with a blank icon and App Store submission would fail. BRIEF \u2014 Concept: the FAS wheel is already the brand (LogoMark.swift, brand-mark.tsx); the icon should be the wheel mark, no wordmark, no face imagery (a face photo/mesh icon reads consumer-cosmetic, QOVES territory; an abstract instrument reads clinical). Geometry: reuse brand-mark.tsx proportions \u2014 full-bleed circle of radius 15/16 of half-width, hub at 4/15 of outer radius; after the 5-facet migration, five 72\u00b0 sectors starting at 12 o'clock, separated by 2.5%-width canvas-colored slits (mirroring AestheticWheel's quadrant gaps at AestheticWheel.swift:81-95); thin ink ring (0x0A0A0F at 3% width) around the circle. Colors: the five facet hues from the unified palette (0xC9BBEE, 0xA6B4DD, 0x7A8094, 0xE9B5E0, 0xF2C9A1) on canvas 0xFAFAFA background; hub filled canvas with hairline ink ring. Dark variant (iOS 18): same wheel on 0x0A0A0F with hub 0x0A0A0F; tinted variant: sectors as opacity steps 0.38/0.52/0.64/0.82/1.0 of white (reusing the severity ramp as a brand gesture). The pastels need the slit + ink ring to hold up at 60px; verify at 29pt settings size.",
+     "severity": "high",
+     "recommendation": "BUILD SPEC: (1) create FaceMap/Assets.xcassets/Contents.json ({\"info\":{\"author\":\"xcode\",\"version\":1}}); (2) AppIcon.appiconset/Contents.json with the modern single-size form: images: [{idiom:universal, platform:ios, size:1024x1024, filename:AppIcon.png}, plus {appearances:[{appearance:luminosity,value:dark}]} and tinted entries]; (3) generate the three 1024x1024 PNGs by scripting the SVG geometry above (a small Swift CLI using CoreGraphics, or rsvg-convert from an .svg checked into web/public) \u2014 the geometry is fully specified by brand-mark.tsx so this is automatable; (4) add an AccentColor.colorset (0x0A0A0F) and set ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME; (5) add the xcassets folder reference to the FaceMap target in project.pbxproj. No human input required except final visual sign-off.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap.xcodeproj/project.pbxproj",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/LogoMark.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/components/brand-mark.tsx"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Comparison deltas: salience of improvement vs worsening is inverted, and the encoding is opacity-blind",
+     "detail": "ComparisonScreen.swift:286-295: an improved metric gets a near-black ink arrow (maximum visual weight) while a worsened metric gets the pastel domain hue (decorative weight) \u2014 the practitioner's eye is pulled to good news and skates over regressions, the opposite of clinical priority. The arrow metaphor is also ambiguous: 'arrow.down.right' means improved (severity went down) but down-right arrows conventionally read negative. In regionChangeRow (:198-218), 'projection gained' = ink and 'projection lost' = pink, with the same inversion problem; for filler patients, gained projection in a treated region is usually the desired outcome, so neither pole should borrow a facet hue. Severity legibility generally: the mild step of the ramp is domain hue at 0.38 opacity over near-white (Theme.swift:82-89) \u2014 for E9B5E0 and C9BBEE that is roughly a 1.2-1.4:1 contrast against the canvas in an 8-10pt dot (SeverityDot.swift:10-16), effectively invisible in peripheral scanning and unprintable; severity is encoded by opacity alone in list rows (no shape/text redundancy), which fails for color-vision deficiency.",
+     "severity": "medium",
+     "recommendation": "Use the new positive/negative status tokens for delta arrows (worsened = negative brick, improved = positive green-gray, unchanged = inkMuted) and swap glyphs to checkmark/exclamation-style or up/down relative to severity with a text label ('Improved'/'Worsened') which severityChangeLabel already provides \u2014 give it the status color too. For SeverityDot, add redundancy: keep hue+opacity but render ringIndex as 0-3 filled segments or pair the dot with the existing severity text everywhere it appears standalone.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/SeverityDot.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Theme.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Theme has no spacing scale; 13 distinct padding values in use",
+     "detail": "Theme.swift defines radii and hairline width but no spacing tokens. The UI layer uses raw paddings 4, 6, 8, 10, 12, 13, 14, 16, 24, 28, 32, 40, 48 (frequency survey across FaceMap/UI: 16 appears 38x, 8 23x, 12 13x, plus oddballs like 13 at Buttons.swift:25 and 14, 28 once each). Card interiors drift between 6, 8, and 12 across MetricRow/ComparisonScreen/PDF rows, which is visible as uneven rhythm when cards stack on the analysis and comparison screens.",
+     "severity": "low",
+     "recommendation": "Add Theme.space: s4=4, s8=8, s12=12, s16=16, s24=24, s32=32, s40=40; normalize 6\u21928 (or keep 6 as s6 for dense PDF rows), 10\u21928 or 12, 13/14\u219212 or 16. Mechanical sweep, good lint-rule candidate afterwards.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Theme.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/Buttons.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "LogoMark doc comment and quadrant mapping are stale relative to the 5-facet enum",
+     "detail": "LogoMark.swift:3-10 still documents quadrants as 'Theme.domainOptical / domainStructural / domainMechanical' \u2014 token names that no longer exist (renamed in Theme.swift:31-36) \u2014 and the mark renders only 4 of the 5 facets, omitting Expression entirely, while the web brand-mark also draws 4 quadrants using the old domainHues object (brand-mark.tsx:13-16) rather than facetHues. The brand mark therefore tells a 4-domain story while the product, the wheel, and the marketing copy tell a 5-facet (FAS) story. This matters for the icon brief above: whichever sector count is chosen must be applied to LogoMark, brand-mark.tsx, and the app icon together.",
+     "severity": "low",
+     "recommendation": "Decide once: 5-slice mark (recommended \u2014 matches FAS and the v0.6 wheel) and update LogoMark.swift slices/comments, brand-mark.tsx paths (five 72\u00b0 arcs), and derive the app icon from it. If the 4-quadrant mark is kept deliberately as a simplified logo, document that decision in both files so the next agent doesn't 'fix' it.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/LogoMark.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/components/brand-mark.tsx"
+     ],
+     "wave2Candidate": true
+    }
+   ]
+  },
+  {
+   "role": "qa",
+   "summary": "The metric/analyzer core is well-tested and defensively coded (range-guarded indexing, topology-mismatch guard, NaN-tolerant formatting), but the persistence and capture seams are fragile: corrupt stored-mesh JSON can hard-crash the app, capture has zero handling for session failure/interruption or camera-permission denial, and every failure path (save, photo encode, PDF export) is silent. Most critically, a visit saved via \"Add visit\" from a patient's screen is never bound to that patient \u2014 it lands in the \"Unassigned\" bucket with no rebind UI, which breaks the core visit-over-visit comparison workflow FaceMap differentiates on. Test coverage is good for metric math but absent for Codable round-trips, corrupt payloads, calibration-store hostile inputs, and PDF generation.",
+   "findings": [
+    {
+     "title": "Saved visits never bind to the patient they were captured for \u2014 all new cases land in 'Unassigned'",
+     "detail": "PatientDetailScreen's 'Add visit' pushes CaptureScreen() with no patient context (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift:89-92). The save sheet in AnalysisScreen constructs PatientCase without a patient (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift:447-456), and CaseStore.save rebinds nil-patient cases to the 'Unassigned' bucket (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift:80-84). PatientListScreen.swift:85 promises an 'Unassigned bucket you can re-bind later' but no rebind UI exists anywhere (grep confirms only bootstrap migration sets .patient). Net effect: the Visit-2-vs-Visit-1 ComparisonScreen flow \u2014 the product's key differentiator \u2014 only works by comparing inside the Unassigned bucket; per-patient timelines, trends, and PDF patient codes are all broken for new captures.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift"
+     ],
+     "severity": "blocker",
+     "recommendation": "Thread an optional `patient: Patient?` through CaptureScreen \u2192 AnalysisScreen \u2192 the save sheet, pass it to PatientCase(init patient:), and pre-fill the label with the patient code. Separately add a 'Move to patient\u2026' action on visit rows so Unassigned cases can be rebound. Add a PatientMigrationTests case asserting a save initiated with a patient binds to it.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Corrupt CapturedFace JSON crashes the app instead of degrading to 'Mesh unreadable'",
+     "detail": "CapturedFace uses synthesized Codable, so any [Float]/[Int16] payload decodes. But: (1) the `vertices` accessor indexes vertexData[i+1]/[i+2] in a stride-3 loop with no multiple-of-3 check \u2014 a truncated array traps (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/CapturedFace.swift:39-48); (2) the `transform` accessor indexes d[0]\u2026d[15] with no count check (CapturedFace.swift:50-58); (3) FaceMeshOverlay maps triangle indices with `UInt32($0)` \u2014 any negative Int16 traps at runtime (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/FaceMeshOverlay.swift:219 `d.primitives = .triangles(face.triangleIndices.map { UInt32($0) })`). PatientCase's `try?` decode (PatientCase.swift:87-99) only protects against malformed JSON, not structurally-valid-but-corrupt values, so one bad externally-stored blob makes a patient record permanently crash the visit list/compare/analysis screens. Currently the only handled corrupt case is full decode failure \u2192 nil \u2192 ComparisonScreen 'Mesh unreadable' placeholder (ComparisonScreen.swift:123-130) and dimmed unopenable rows (PatientDetailScreen.swift:268-270).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/CapturedFace.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/FaceMeshOverlay.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift"
+     ],
+     "severity": "high",
+     "recommendation": "Give CapturedFace a custom init(from:) that validates vertexData.count % 3 == 0, transformData.count == 16, triangleIndices.count % 3 == 0, all indices in 0..<vertexCount, and throws otherwise (decode failure then flows into the existing nil/'Mesh unreadable' paths). Add unit tests feeding truncated vertexData, 15-float transforms, and negative triangle indices through JSONDecoder.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "No ARSession failure/interruption handling: camera denial hangs silently; backgrounding mid-hold can fire a stale, wrong-pose snapshot",
+     "detail": "FaceCaptureView.Coordinator implements only session(_:didUpdate:) (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift:41-62). There is no session(_:didFailWithError:), sessionWasInterrupted, or sessionInterruptionEnded. Consequences: (a) if the user denies camera permission, the session fails and the UI sits forever on 'Position your face in front of the camera' (CaptureScreen.swift:171-172 only distinguishes unsupported/noFace/tracking) with no path to Settings; (b) if the app backgrounds during the 0.6s hold after triggerCapture set pendingSnapshot=true (FaceCaptureView.swift:24-25, CaptureScreen.swift:119-123), the 10-frame buffer retains pre-interruption geometry, and on resume the snapshot fires on the first frame regardless of current head pose \u2014 averaging stale frames with new ones and recording a potentially wrong-pose capture into the clinical record with no warning; isCapturing also stays true (overlay stuck) until that delayed snapshot lands.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift"
+     ],
+     "severity": "high",
+     "recommendation": "Implement the three missing ARSessionDelegate methods: on interruption/failure clear recentGeometries and pendingSnapshot and emit a new TrackingState (.interrupted / .permissionDenied with a Settings deep-link button). In CaptureScreen, also reset poseInWindowSince/isCapturing on scenePhase != .active. Additionally re-verify the pose window at snapshot time (drop the snapshot if yaw left the window).",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Case save failures are completely silent \u2014 a visit can be 'saved' as empty Data and the clinician told nothing",
+     "detail": "PatientCase.init swallows encode failures with `(try? JSONEncoder().encode(...)) ?? Data()` (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift:56-57,62-63), so a case can persist with an empty mesh blob; on reload capturedFace decodes to nil and the visit row is permanently dimmed/unopenable. CaseStore.save catches context.save() errors and only logs (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift:85-91), while AnalysisScreen's Save button unconditionally dismisses as if it succeeded (AnalysisScreen.swift:456-458). For a clinical record-keeping app, data loss must surface to the user. This is the sharpest instance of the known 33-silent-try? gap because it loses the primary artifact of a patient visit.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "severity": "high",
+     "recommendation": "Make CaseStore.save throwing (or return Result), make PatientCase.init throwing for the mesh encode (metric results/annotations can stay best-effort), and show an alert from the save sheet on failure instead of dismissing. Add a test that a PatientCase whose capturedFaceJSON is empty Data round-trips to capturedFace == nil (documenting the legacy fallback).",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Calibration stores accept out-of-range/negative indices; negative indices crash CalibrationMeshView",
+     "detail": "LandmarkCalibrationStore.save and RegionCalibrationStore.save persist arbitrary Ints with no range validation (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift:43-49, RegionCalibrationStore.swift:43-49). Analysis consumers guard both bounds (AnalyzableFace.swift:31-32, SurfaceChangeAnalyzer.swift:59,78, AsymmetryMetric.swift:98, FaceMeshOverlay.swift:240), but CalibrationMeshView guards only the upper bound: `for idx in pickedIndices where idx < verts.count` then `verts[idx]` (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/CalibrationMeshView.swift:151-153) and `guard let center = indexLabelCenter, center < verts.count` then `verts[center]` (CalibrationMeshView.swift:171-172). A negative index in UserDefaults (corrupted plist, future bug, or a hand-edited backup) crashes the calibration screen \u2014 the very screen needed to fix bad calibration. Also note CalibrationScreen's 'Reset all' clears the persistent store immediately even if the user then backs out without saving (CalibrationScreen.swift:218-223), silently destroying a full 18-landmark calibration.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/RegionCalibrationStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/CalibrationMeshView.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CalibrationScreen.swift"
+     ],
+     "severity": "high",
+     "recommendation": "Validate 0..<1220 (or 0..<Int16.max) in both stores' calibrated()/save(), dropping invalid entries; add `idx >= 0` / `center >= 0` to the two CalibrationMeshView guards; gate 'Reset all' behind a confirmation dialog and defer the store clear to Save. Add store tests for negative/huge indices and corrupt Data under the UserDefaults key.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Topology-mismatched or undecodable visit comparison silently hides the region-changes section",
+     "detail": "ComparisonScreen computes regionChanges in .task; if either mesh fails to decode the block is skipped, and SurfaceChangeAnalyzer.regionChanges returns [] on vertex-count mismatch (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift:38-43; SurfaceChangeAnalyzer.swift:51). The section renders only `if !regionChanges.isEmpty` (ComparisonScreen.swift:165-167), so the clinician cannot distinguish 'no measurable change' (which gets an explicit noise-floor message) from 'comparison impossible' (nothing at all). Also, region tracking depends on calibrated bony landmarks (SurfaceChangeAnalyzer.swift:41-43 uses FaceLandmarkIndices.vertexIndex, i.e. placeholders until calibrated), yet ComparisonScreen shows no uncalibrated warning banner \u2014 unlike AnalysisScreen (AnalysisScreen.swift:100-108) and the PDF.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/SurfaceChangeAnalyzer.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Track a tri-state (loading / computed / incompatible) in ComparisonScreen and render an explicit 'These two captures cannot be compared (mesh missing or topology mismatch)' card for the failure case. Add the CalibrationWarningBanner to ComparisonScreen when LandmarkCalibrationStore.shared.isFullyCalibrated is false, since the stable-landmark offset cancellation rests on those indices.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Photo encode failure is silent at capture and in comparison; one missing frontal photo hides the entire before/after row",
+     "detail": "currentFramePhotoJPEG returns nil on any failure (no currentFrame, CIContext failure, JPEG encode failure \u2014 /Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift:90-95) and the capture flow proceeds without telling the practitioner the clinical photo was not recorded (CaptureScreen.swift:78-81 just stores nil, which removes the dictionary key). Downstream, ComparisonScreen's photo row requires BOTH visits to have a decodable frontal photo and otherwise renders nothing (ComparisonScreen.swift:134-148) \u2014 a clinician comparing a legacy (pre-photo) visit against a new one gets no explanation for the missing before/after. The Analysis photos sheet similarly just omits poses (AnalysisScreen.swift:304-317).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Surface a non-blocking warning in CaptureScreen when handleSnapshot receives photoJPEG == nil ('Mesh captured; clinical photo failed \u2014 retake?'). In ComparisonScreen, show the photo row whenever EITHER visit has a frontal photo, with a 'No photo recorded for this visit' placeholder on the missing side.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "TreatmentPlanPDF is stale and silently clips: fixed single page, no photos/region-changes/skin-quality, wrong units for two metrics",
+     "detail": "Known-stale, deepened with specifics: (1) the page is a fixed A4 frame (TreatmentPlanPDF.swift:23,92) \u2014 with 8 metric rows plus pins plus long notes the right column overflows and content is clipped with no indication; footer hardcodes 'Page 1 of 1' (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift:270). (2) formatPDFValue's default branch renders SkinQualityAnalyzer and ExpressionAsymmetryMetric values as percentages ('%.1f%% (\u2264 %.0f%%)', lines 287-297) \u2014 a texture index of 0.04 prints as '4.0%', clinically misleading on a signed document (AnalysisScreen.formatValue at AnalysisScreen.swift:536-560 has the correct per-metric formats). (3) No clinical photos, no region-projection changes, no per-pose meshes. (4) exportPDF has three silent-return failure points: nil patient, nil PDF data, temp-file write failure (AnalysisScreen.swift:510-519, ShareSheet.swift:22-31) \u2014 the export button can do nothing with zero feedback. (5) The PDF filename embeds the raw label; '/' is sanitized but newlines/control characters are not (ShareSheet.swift:23).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/ShareSheet.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Rebuild PDF generation as multi-page (paginate metric rows + notes), port the per-metric formatter from AnalysisScreen into a shared MetricValueFormatter used by both, add a photos page (frontal/oblique L/R) and a region-changes table when a prior visit exists, and alert on export failure. Add a smoke test that generate() returns non-nil for a synthetic case with 10k-char notes and that the uncalibrated strip toggles with store state.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Notes are unbounded and saved to SwiftData on every keystroke",
+     "detail": "AnalysisScreen persists notes via onChange(of: notes) \u2192 c.notes = newValue; try? store.context.save() \u2014 one full context save per keystroke (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift:167-172), again with a silent try?. There is no length cap: a pasted multi-page note (e.g. 100k chars) is re-saved per keystroke, renders fully in the PDF notes block where it silently clips the fixed page (TreatmentPlanPDF.swift:168-177), and the list preview path handles it only because of the 60-char prefix (AnalysisScreen.swift:367-374). PatientCase.notes is a plain String? with no validation (PatientCase.swift:26).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Debounce the notes save (e.g. save on sheet dismiss plus a 1-2s debounce), cap notes at a documented length (e.g. 20k chars) with a character counter in the sheet, and truncate in the PDF with an explicit '(continued in app)' marker until pagination lands. Add a persistence test round-tripping a 100k-char notes string.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Capture flow has no retake/cancel; post-save re-entry can double-save and overwrites only the last pose",
+     "detail": "Once a pose auto-captures there is no way to retake it \u2014 a blink/grimace frame is locked in for the visit. After the third pose, CaptureScreen stays on the stack with captures intact and currentPose == .obliqueR; navigating back from AnalysisScreen and tapping capture overwrites only obliqueR and re-navigates with a new MultiPoseCapture (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift:78-96), so a user can save the same visit twice or save a Franken-capture (old frontal + new obliqueR). There is also no explicit way to skip an oblique pose for patients who cannot turn (tap-to-capture mid-turn silently records an off-target yaw with no quality flag).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Add a per-pose review step (thumbnail + Retake/Use buttons) or at minimum a 'Start over' button; reset captures/photos/currentPose when returning from a completed flow (.onAppear when multiPoseResult != nil); record the actual yaw at snapshot time on CapturedFace so off-window captures are flaggable later.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Frame-averaging buffer assumes a constant vertex count across buffered frames",
+     "detail": "captureSnapshot takes n = recentGeometries[0].vertices.count and indexes every buffered sample with 0..<n (/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift:68-72). ARKit's face mesh topology has been stable, but the code itself documents this as an external invariant; if a session reconfiguration or future ARKit change ever yields a differing count mid-buffer, this is an index-out-of-range crash in the middle of a patient capture. triangleIndices is likewise latched once and never re-validated against later frames (FaceCaptureView.swift:49-51).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift"
+     ],
+     "severity": "low",
+     "recommendation": "Filter the buffer at snapshot time to samples whose vertices.count == n (or drop the buffer on count change in didUpdate). One-line defensive guard; cheap insurance for a clinical capture path.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Default landmark indices appear to come from a different mesh topology (MediaPipe-style), making uncalibrated output anatomically arbitrary \u2014 including in comparison",
+     "detail": "The placeholder values in FaceLandmarkIndices.defaultVertexIndex (168 nasion, 133/362/33/263 canthi, 234/454 zygions \u2014 /Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/FaceLandmarkIndices.swift:35-58) are canonical MediaPipe FaceMesh (468-vertex) indices, not ARKit 1220-vertex topology indices. This deepens the known uncalibrated gap: before calibration the metrics aren't merely imprecise, they measure essentially random points; and SurfaceChangeAnalyzer.stableLandmarks (SurfaceChangeAnalyzer.swift:41-43) consume the same indices, so the bony-landmark offset cancellation in visit comparison is also placeholder-driven \u2014 yet ComparisonScreen shows no uncalibrated warning (see related finding). The file header admits 'publicly-circulated reference indices' but the provenance mismatch is worth flagging explicitly in code and in the banner copy.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/FaceLandmarkIndices.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/SurfaceChangeAnalyzer.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Document in FaceLandmarkIndices that the seeds are MediaPipe-derived and unverified on ARKit topology; strengthen the uncalibrated banner copy to 'values are not anatomically meaningful until calibrated'; after the human performs on-device calibration (deviceTestScript step 5), consider shipping the verified ARKit indices as the new defaults.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Test-coverage gaps: persistence, hostile inputs, capture-pose math, and PDF are untested",
+     "detail": "FaceMapTests/ covers metric math, the two calibration stores' happy paths, surface-change behavior (including topology mismatch \u2014 SurfaceChangeAnalyzerTests.swift:90-96), skin quality, and patient migration/photo round-trip. Missing vs. the risk register: (1) CapturedFace Codable round-trip and corrupt-payload decoding (truncated vertexData, short transform, negative triangle indices) \u2014 the crash paths in finding 2 have zero coverage; (2) PatientCase decode fallbacks (empty Data, garbage JSON \u2192 nil capturedFace / [] metricResults) and the multiPoseCapture reassembly property (PatientCase.swift:103-111); (3) calibration stores with out-of-range/negative indices and corrupt Data under the UserDefaults key (current tests only round-trip valid values \u2014 LandmarkCalibrationStoreTests.swift:27, RegionCalibrationStoreTests.swift:27); (4) CapturePose.contains/yawError window math and HeadPose.from(transform:) Euler decomposition (the v0.5 coached-capture core has no tests at all); (5) TreatmentPlanPDF.generate smoke test (non-nil data, uncalibrated strip toggling, long-notes input); (6) noise-floor regression: a test pinning noiseFloorMeters == 0.0003 and exceedsNoiseFloor boundary behavior (RegionChange at exactly 0.3mm); (7) MetricRegistry.evaluateAll on a zero-vertex AnalyzableFace asserting every metric returns its NaN/'Unavailable' failure result rather than trapping; (8) ComparisonScreen delta merging for disjoint metric sets (a visit saved before skin-quality existed vs. one after).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/SurfaceChangeAnalyzerTests.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/LandmarkCalibrationStoreTests.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/PatientMigrationTests.swift"
+     ],
+     "severity": "medium",
+     "recommendation": "Add four test files: CapturedFaceCodableTests (round-trip + 3 corrupt payloads), CapturePoseTests (window boundaries at \u00b15\u00b0, yawError signs, HeadPose decomposition for identity/30\u00b0-yaw transforms), CalibrationStoreHostileInputTests (negative/huge indices, corrupt Data), TreatmentPlanPDFTests (smoke + long notes + calibration strip). Extend PatientMigrationTests with empty-Data and garbage-JSON cases and a multiPoseCapture reassembly assertion.",
+     "wave2Candidate": true
+    },
+    {
+     "title": "Zero-vertex / degenerate face handled correctly in analysis but produces a blank, unexplained viewer",
+     "detail": "Verified the good news: AnalyzableFace.position bounds-checks (AnalyzableFace.swift:30-34) so metrics on an empty mesh return their 'Unavailable: \u2026' NaN results (e.g. AsymmetryMetric.failure, AsymmetryMetric.swift:105-109), and FaceMeshOverlay.buildMeshEntity guards empty vertices/triangles by returning nil (FaceMeshOverlay.swift:209-211). However the nil path just leaves an empty black viewport with no message \u2014 in AnalysisScreen/SummaryHeader/MeshFullScreen the user sees a black box and a wall of 'Unavailable' metrics with no explanation that the capture is degenerate, and Save is still permitted, persisting a useless visit.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/FaceMeshOverlay.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "severity": "low",
+     "recommendation": "When face.vertexCount == 0 (or below a sanity threshold like 100), show an explicit 'Capture invalid \u2014 please recapture' state in AnalysisScreen and disable Save. Cheap guard at the top of AnalysisScreen.body using face.vertexCount.",
+     "wave2Candidate": true
+    }
+   ],
+   "deviceTestScript": "# FaceMap v0.5 On-Device Test Script\n\n**Device:** iPhone with TrueDepth (iPhone X or newer), iOS 17+. **Build:** current `main` (5279c57).\n**Setup:** Delete any existing FaceMap install first (fresh SwiftData store + fresh UserDefaults = uncalibrated state). Build & run from Xcode. Have good, even lighting and a mirror-height place to sit.\n\nRecord PASS/FAIL plus notes for each numbered check. Items marked **[KNOWN-BUG CHECK]** verify findings from this review \u2014 expected behavior is described so you can confirm or refute.\n\n---\n\n## 0. First launch & permissions\n\n1. Launch. Confirm the disclaimer gate appears and blocks the app until accepted.\n2. Go to the Capture tab. When iOS asks for camera permission, tap **Don't Allow**.\n   - **[KNOWN-BUG CHECK]** Expected bug: screen sits on \"Position your face in front of the camera\" forever with no error or Settings link. Note what you see.\n3. Settings \u2192 FaceMap \u2192 enable Camera. Relaunch the app, return to Capture.\n\n## 1. Three-pose capture with photos\n\n4. **Frontal:** look straight at the camera. Verify: dashed oval goes solid, status pill reads \"Hold \u2014 capturing\u2026\", the ring fills in ~0.6 s, auto-capture fires, progress bar segment \"Front\" fills.\n5. **Oblique L:** follow the prompt \"turn your head to your right\". Verify the yaw readout (e.g. \"Yaw \u221218\u00b0\") counts toward \u221230\u00b0, capture auto-fires inside \u00b15\u00b0.\n6. **Oblique R:** same to the left (+30\u00b0). After the third capture you should land on the Analysis screen automatically.\n7. On Analysis: verify the **pose picker** shows Front / \u00be L / \u00be R; switching poses changes the mesh AND re-runs metrics (watch the findings list update).\n8. Open **More \u2192 Clinical photos**. Verify: 3 pages, one per pose; each photo matches its pose; photos are **unmirrored** (text on a card you hold up should read correctly \u2014 this is intentional clinical convention); portrait orientation; acceptable sharpness.\n9. Verify the **Skin quality** result appears in the findings (it is photo-derived; it should appear for any pose that has a photo).\n\n## 2. Uncalibrated banner\n\n10. On Analysis (fresh install): verify the **uncalibrated warning banner** appears under the header. Note its wording.\n11. Tap the banner \u2014 it must open the Calibration screen.\n\n## 3. Calibration with vertex labels\n\n12. In Calibration: rotate/zoom the mesh; try presets (Front, \u00be L, \u00be R, L, R, Top) and the reset-view button.\n13. Tap the **\"123\" button**. Verify cyan vertex-index labels appear clustered around the current landmark's seeded position; tap a vertex and confirm the labels re-center around your tap and the tapped index is shown (\"Picked vertex N\").\n14. Calibrate at least 3 landmarks; use **Undo** and **Skip** once each and confirm sane behavior. Note progress counter (\"N of 18 calibrated\").\n15. Tap **Save**, go back to Analysis \u2192 banner should STILL show (partial calibration). \n16. Re-enter calibration \u2014 verify it **resumes at the first uncalibrated landmark**. Complete all 18, Save & finish. Banner must now be gone, and metric values should have changed (re-evaluated).\n17. **[KNOWN-BUG CHECK]** Re-enter calibration, tap **Reset all**, then back out WITHOUT saving. Re-open Analysis: expected bug \u2014 the banner is back because Reset all cleared the persistent store immediately, even though you never tapped Save. Recalibrate fully afterwards (you need this for step 6).\n18. **Region painting:** from Calibration tap the paintbrush, paint a couple of regions, save, verify the heatmap/asymmetry visuals use them.\n\n## 4. Save, reopen, persistence\n\n19. From Analysis: add a **note** (a few sentences), then toolbar **Save**, label `P-001 Visit 1`, Save.\n20. Go to the Patients tab. **[KNOWN-BUG CHECK]** Expected bug: the visit is under **\"Unassigned\"**, not a P-001 patient \u2014 even if you started capture from inside a patient's detail screen via \"Add visit\". Verify both entry points (ad-hoc Capture tab AND PatientDetail \u2192 Add visit) and record where each visit lands.\n21. Open the saved visit. Verify: mesh renders, all 3 poses in the picker, photos sheet shows 3 photos, metric results match what you saved, notes text intact.\n22. Force-quit the app (swipe up in app switcher). Relaunch. Reopen the visit \u2014 everything must still be there (notes, photos, pins if any).\n23. Edit the note to a very long text: paste ~5+ paragraphs. Verify typing stays responsive (each keystroke currently triggers a DB save). Keep this long note for the PDF test.\n\n## 5. Mid-capture interruption\n\n24. Start a new capture. While holding the frontal pose with the ring ~half full, **press the side button** (lock) or swipe to Home. Wait 5 s, return.\n   - Verify: no permanently stuck \"Capturing\u2026\" overlay; tracking resumes.\n   - **[KNOWN-BUG CHECK]** If a capture fires immediately on resume, inspect it: it may be averaged from stale pre-interruption frames or captured at the wrong yaw. Note whether the resulting mesh/photo looks wrong.\n25. During an oblique hold, have a second person call the phone (or trigger a banner notification + pull down notification center). Same checks.\n26. Back out of capture mid-flow (after 1 of 3 poses) via the back button. Re-enter \u2014 verify state is sensible (note whether old captures linger in the progress bar).\n\n## 6. Second capture + Compare (noise-floor check)\n\n27. Capture the **same person** again, same lighting, a few minutes later. Neutral face both times. Save as `P-001 Visit 2` (it will land wherever step 20 showed).\n28. Open the patient that holds both visits (likely \"Unassigned\") \u2192 menu \u2192 **Compare visits** \u2192 select both \u2192 Compare.\n29. Verify the comparison screen top-to-bottom:\n   - **Header:** correct day count between visits.\n   - **Mesh row:** both meshes render; sync-rotation lock ON: dragging one rotates both; toggle OFF: independent.\n   - **CLINICAL PHOTOS row:** both frontal photos side by side with the arrow. (If this row is missing, that's the silent-hide bug \u2014 note it.)\n   - **REGION PROJECTION CHANGES \u2014 the noise-floor check:** since this is the same untreated face captured twice, expected result is the message \"No region changed by more than the \u00b10.3 mm capture-noise floor.\" If regions DO exceed \u00b10.3 mm, record which regions and by how much \u2014 that is a real signal-quality finding (possibly placeholder stable-landmark indices; you are calibrated, so record values both pre- and post-calibration if possible).\n   - **WHEELS + CHANGES table:** every metric shows A \u2192 B values with arrows; severities mostly unchanged for a same-face recapture.\n30. Compare `Visit 1` against a visit that has **no photos** if you have one (or temporarily test by comparing against an old pre-photo build's record): note whether the photos row vanishes without explanation.\n\n## 7. PDF export\n\n31. Open saved `Visit 1` (must be a saved case \u2014 the share icon only appears for saved visits). Tap the share/export icon.\n32. Share the PDF to Files and open it. Verify:\n   - Header: FACEMAP, practitioner name, patient code, visit label, date.\n   - Mesh snapshot image present (not the \"Mesh image unavailable\" black box).\n   - Aesthetic wheel rendered.\n   - Metric rows: all metrics listed. **[KNOWN-BUG CHECK]** Check Skin quality and Expression asymmetry rows \u2014 expected bug: values formatted as percentages (e.g. \"4.0% (\u2264 \u2026%)\") instead of the in-app texture/ratio format.\n   - **[KNOWN-BUG CHECK]** With your long note from step 23: expected bug \u2014 notes (and possibly the metric table) clip off the bottom of the single page with no \"continued\" marker; footer always says \"Page 1 of 1\".\n   - Confirm NO calibration warning strip (you are fully calibrated). Then clear calibration (More \u2192 Calibrate \u2192 Reset all), re-export, and confirm the amber warning strip APPEARS. Recalibrate after.\n   - Note what's absent: clinical photos, region-change table, oblique meshes (stale-PDF gap \u2014 confirm for the record).\n33. Export a visit whose label contains `/` and an emoji (save a quick extra case named `A/B \ud83e\uddea`). Verify the share sheet still appears and the filename is sane.\n\n## 8. Quick robustness spot-checks\n\n34. Patient with 0 visits: create patient, open it \u2014 \"No visits yet\" card, no crash.\n35. Multi-select compare with the dimmed/unreadable visit row if you ever see one \u2014 note behavior.\n36. Rotate device, switch light/dark system mode, and background/foreground on every major screen (Capture, Analysis, Calibration, Compare, PDF share) \u2014 no layout breakage or crashes.\n\n**Deliverable:** the numbered PASS/FAIL list, the noise-floor region values from step 29, screenshots of any failures, and the device model + iOS version."
+  },
+  {
+   "role": "security",
+   "summary": "The new clinical-photo storage has one genuine blocker: photos and meshes are stored via SwiftData `.externalStorage`, which writes blobs outside the store file, so the backup-exclusion code in FaceMapApp.swift silently fails to do what its own comment promises and patient face photos will travel into iCloud/Finder backups. Two further high-severity gaps compound this: the \"Lock with Face ID\" setting is decorative (nothing ever enforces it), and there is no app-switcher privacy redaction or share-sheet temp-file cleanup, so patient photos and PDFs linger in system snapshots and tmp. The disclaimer posture is strong and consistent in-app and in the PDF, with only modest drift on the web copy; the try? triage splits cleanly into 16 must-surface (real patient-data-loss paths around context.save and JSON encodes), 15 must-log, and 2 acceptable-silent sites.",
+   "findings": [
+    {
+     "title": "Clinical photos and meshes escape the iCloud-backup exclusion via .externalStorage",
+     "detail": "FaceMapApp.swift:33-48 excludes only the store file plus '-shm'/'-wal' sidecars from backup, and its comment claims patient data 'must not travel into iCloud / Finder backups'. But PatientCase.swift:18,31-39 marks capturedFaceJSON, both oblique meshes, and all three new photo JPEGs as @Attribute(.externalStorage). SwiftData/Core Data writes external binary blobs into a separate `<store>_SUPPORT/_EXTERNAL_DATA/` directory next to the store, which the suffix loop never touches. Net effect: the most sensitive data in the app \u2014 identifiable patient face photos \u2014 is now backed up to iCloud while only the comparatively small SQLite metadata is excluded. This directly contradicts README pre-production checklist item 3 and the privacy story implied to practitioners.",
+     "severity": "blocker",
+     "recommendation": "In excludeStoreFromBackup, also set isExcludedFromBackup on the external-storage support directory (e.g. enumerate configuration.url.deletingLastPathComponent() and exclude `\\(storeName)_SUPPORT` / `.\\(storeName)_SUPPORT` if present), or simpler and more robust: place the store in a dedicated subdirectory of Application Support via ModelConfiguration(url:) and exclude that whole directory. Add a unit/UI test that creates a case with a photo and asserts every file under the store directory has the exclusion flag.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/FaceMapApp.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "'Lock with Face ID' setting is never enforced \u2014 false privacy promise over patient photos",
+     "detail": "SettingsScreen.swift:7 defines @AppStorage(\"biometricLockEnabled\") and the section footer promises 'When on, FaceMap re-authenticates with Face ID before opening saved cases.' LAContext is used only inside SettingsScreen.swift:147-164 to authenticate the act of toggling the switch on. A repo-wide grep shows no other reference to biometricLockEnabled \u2014 PatientListScreen, PatientDetailScreen, AnalysisScreen, and the photos sheet never check it. A practitioner who enables the lock believes patient face photos are gated; they are not. A documented-but-unimplemented security control is worse than no control for a medical-adjacent app.",
+     "severity": "high",
+     "recommendation": "Either enforce it (e.g. a BiometricGate wrapper around ContentView or around PatientDetailScreen/AnalysisScreen that calls LAContext.evaluatePolicy with .deviceOwnerAuthentication on appear and on return from background when biometricLockEnabled is true) or remove the toggle until implemented. Prefer .deviceOwnerAuthentication (passcode fallback) over biometrics-only.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Exported treatment-plan PDFs accumulate in tmp with no cleanup and no file protection",
+     "detail": "PDFShareItem.write (ShareSheet.swift:22-32) writes the PDF to FileManager.default.temporaryDirectory with only [.atomic], and nothing ever deletes it \u2014 ShareSheet (AnalysisScreen.swift:147-149) has no completionWithItemsHandler and the sheet's dismissal does no cleanup. tmp is purged only opportunistically by iOS, so PDFs containing patient code, visit label, metric values, annotation pins, and free-text clinical notes persist on disk indefinitely under the default NSFileProtectionCompleteUntilFirstUserAuthentication class. The filename itself (AnalysisScreen.swift:517, 'FaceMap_\\(p.code)_\\(c.label)_\u2026') embeds the patient code, and sanitization only strips '/' (ShareSheet.swift:23), so a label containing ':' or control characters survives into the filename. Write failure returns nil silently and the practitioner just sees nothing happen.",
+     "severity": "high",
+     "recommendation": "Write each PDF to a unique subdirectory of tmp with options [.atomic, .completeFileProtection]; delete the file (or the whole subdirectory) in UIActivityViewController.completionWithItemsHandler and on sheet dismissal; sweep leftover FaceMap_*.pdf files from tmp at app launch; surface an alert when write fails. Broaden filename sanitization to an allowlist of [A-Za-z0-9._-].",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/ShareSheet.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No app-switcher privacy redaction \u2014 patient face photos captured in system snapshots",
+     "detail": "A repo-wide grep finds no scenePhase handling, no .privacySensitive() usage, and no snapshot-redaction overlay anywhere. The new clinical-photos sheet (AnalysisScreen.swift:299-330) and the before/after photo row (ComparisonScreen.swift:132-156) display full patient face photos; when the practitioner swipes to the app switcher or backgrounds the app, iOS writes that screen to the on-disk snapshot cache and displays it in the switcher on a shared clinic device. This is the textbook leak vector for medical photo apps.",
+     "severity": "high",
+     "recommendation": "Add a scenePhase observer at the FaceMapApp/ContentView level that overlays an opaque brand splash (or applies .redacted/.privacySensitive) whenever scenePhase != .active. This is a ~20-line change and covers every screen at once, including photos, mesh, notes, and patient list.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/FaceMapApp.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "try? triage \u2014 16 must-surface sites: silent loss of patient data on save/encode",
+     "detail": "These try? sites can destroy or fail to persist patient clinical data with zero user feedback. (a) ModelContext saves: CaseStore.swift:34, 48, 58, 64, 69, 75, 96 \u2014 archive/unarchive/createPatient/deletePatient/delete(case) all `try? context.save()`; note the one save that IS handled (CaseStore.swift:85-90) proves the team already has the logger pattern, the others just never got it. A failed delete at :96 is also a privacy bug (patient thinks data is gone; it is not). (b) AnalysisScreen.swift:142 (annotation pins) and :170 (clinical notes) \u2014 a practitioner's typed notes silently vanish if save fails. (c) PatientCase encodes: PatientCase.swift:56-57 fall back to empty Data(), silently discarding the entire frontal mesh/metric results at case creation; :60, :62, :63 silently drop annotations and both oblique captures (the new photo fields are raw Data so they are safe); :123 and :129 do the same on update.",
+     "severity": "high",
+     "recommendation": "Route all ModelContext.save() calls through one CaseStore.persist(_ operation: String) helper that does do/try/catch, logs via the existing redacting Logger, and publishes a user-visible error (e.g. @Published lastSaveError driving an alert/toast: 'Could not save \u2014 your last change was not stored'). Make PatientCase.init throwing (or failable) instead of substituting empty Data() for the mesh; a case that cannot encode must not be silently created hollow.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "try? triage \u2014 15 must-log sites and 2 acceptable-silent sites",
+     "detail": "Must-log (failure is recoverable or already indirectly surfaced, but currently leaves no forensic trail): PatientCase.swift:88, 93, 98, 114, 119 \u2014 decode failures make a corrupt record render as an empty/missing case with no way to distinguish 'corrupt' from 'never captured'; CaseStore.swift:29 and :43 \u2014 fetch failures silently skip orphan migration or create a duplicate 'Unassigned' patient; CaseStore.swift:87 and :97 \u2014 cloud-sync upload/delete are stubs today, but :97 is pre-wired so that when sync goes live a failed cloud delete silently retains patient data server-side (a real privacy obligation failure \u2014 flag it now); SchemaMigrationPlan.swift:61 and :64 \u2014 a failed migration fetch/save silently leaves rows unmigrated; LandmarkCalibrationStore.swift:22, :45 and RegionCalibrationStore.swift:22, :45 \u2014 calibration decode/encode failures (covered in the calibration finding). Acceptable-silent (purely visual, nil is a sane fallback): FaceMeshOverlay.swift:220 and CalibrationMeshView.swift:225 \u2014 MeshResource.generate for an overlay entity.",
+     "severity": "medium",
+     "recommendation": "Replace each must-log try? with do/catch + Logger (the redacting subsystem 'com.fuanne.facemap' already exists in CaseStore.swift:12). For PatientCase decode failures, additionally expose an isCorrupt flag so the UI can show 'Record unreadable' instead of an empty analysis. For CaseStore.swift:97, queue failed cloud deletes for retry rather than dropping them. Leave the two MeshResource sites as-is with a brief comment marking them intentionally silent.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/SchemaMigrationPlan.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/RegionCalibrationStore.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Calibration data in UserDefaults has no validation, versioning, or corruption notice",
+     "detail": "LandmarkCalibrationStore.swift:20-30 and RegionCalibrationStore.swift:20-30: if the stored JSON fails to decode, calibrated() silently returns [:], which flips isFullyCalibrated to false \u2014 the practitioner's entire calibration evaporates with no explanation beyond the uncalibrated banner reappearing, and the corrupt blob stays in place. save() at LandmarkCalibrationStore.swift:45 silently drops the write on encode failure (the Save button still dismisses, CalibrationScreen.swift:225-226). Saved indices are never range-validated against the mesh vertex count at save time (downstream consumers do bounds-check: AnalyzableFace.swift:30-34, SurfaceDisplacementMetric.swift:100, AsymmetryMetric.swift:98, SurfaceChangeAnalyzer.swift:60 \u2014 good), so a stale or hand-edited index degrades to 'landmark silently ignored' rather than a crash, which is itself a quiet clinical-accuracy failure. There is also no record of when calibration was performed or against which mesh topology, and UserDefaults restores across device migrations, which contradicts the disclaimer's 'calibrated on this device' framing (DisclaimerCopy.swift:15-17).",
+     "severity": "medium",
+     "recommendation": "Wrap both stores' payloads in a small versioned envelope {version, savedAt, deviceModel, vertexCount, entries}; validate indices 0..<vertexCount at save time and reject otherwise; on decode failure, log and surface a one-time 'Calibration data was unreadable and has been reset' alert instead of silently returning [:]; show the calibration date in Settings and in the PDF next to the isCalibrated flag.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/RegionCalibrationStore.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CalibrationScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "PDF hardcodes Dr Nikolis as preparer and signatory for every practitioner",
+     "detail": "TreatmentPlanPDF.swift:104 prints 'Prepared by Dr Andreas Nikolis \u00b7 MD, FRCSC' and :248 prints 'Practitioner signature \u2014 Dr Andreas Nikolis, MD, FRCSC' on every exported plan, regardless of who actually uses the app. The first-launch gate (DisclaimerGate.swift:45) attests that the user is 'a licensed practitioner', not that they are Dr Nikolis. Any other practitioner exporting a plan produces a clinical document misattributed to a named physician \u2014 a professional-liability and regulatory problem the moment the app reaches a second user, and it weakens the otherwise consistent 'practitioner is the sole clinical decision-maker' posture (DisclaimerCopy.swift:48-50, correctly present in the footer at TreatmentPlanPDF.swift:266).",
+     "severity": "medium",
+     "recommendation": "Add a 'Practitioner name & credentials' field in SettingsScreen (UserDefaults) and use it for both the header and signature line, defaulting to blank ('Prepared with FaceMap') rather than to Dr Nikolis. Keep the Nikolis framework attribution in the About copy where it already lives (DisclaimerCopy.aboutNikolis).",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "No Data Protection entitlement \u2014 patient store readable after first unlock",
+     "detail": "There is no .entitlements file in the repo and FaceMap.xcodeproj/project.pbxproj contains no CODE_SIGN_ENTITLEMENTS or file-protection build setting, so all app files (SwiftData store, external photo blobs, tmp PDFs) sit at the default NSFileProtectionCompleteUntilFirstUserAuthentication class: decryptable any time after the first unlock since boot, including while the device is locked in a clinic. For an app holding identifiable patient face photos, NSFileProtectionComplete (or at minimum CompleteUnlessOpen for files written in background) is the appropriate baseline and is nearly free to adopt since the app is foreground-only.",
+     "severity": "medium",
+     "recommendation": "Add the Data Protection capability with NSFileProtectionComplete as the default class in the entitlements file; verify ARKit capture and SwiftData writes still succeed (the app never writes in background, so Complete is viable). Pair with the tmp-PDF .completeFileProtection fix.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap.xcodeproj/project.pbxproj"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Web disclaimer drifted from iOS source despite 'verbatim' contract",
+     "detail": "web/content/disclaimer.ts:1-4 declares 'Verbatim from FaceMap/UI/DisclaimerCopy.swift. Do not edit without changing the iOS source first.' Two drifts: (1) the file path is stale \u2014 the source now lives at FaceMap/Resources/DisclaimerCopy.swift; (2) the iOS firstLaunchBody gained a third paragraph ('Metric outputs are not clinically meaningful until the landmark indices have been calibrated\u2026', DisclaimerCopy.swift:15-17) that web/content/disclaimer.ts:8-12 lacks, so the public /legal/disclaimer page (web/app/legal/disclaimer/page.tsx) shows weaker, outdated language than the app. The core not-a-medical-device line itself is consistent everywhere checked: DisclaimerCopy.swift:6-10, PDF footer TreatmentPlanPDF.swift:266, web layout meta (web/app/layout.tsx:34), methodology page (:147), terms page (:21), and disclaimer-banner.tsx:15 \u2014 that posture is solid.",
+     "severity": "medium",
+     "recommendation": "Sync disclaimer.ts with the current Swift copy (add the calibration paragraph, fix the path comment) and add a tiny CI check or script that diffs the two so 'verbatim' stays true; consider exporting the disclaimer strings from one JSON source consumed by both targets.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/content/disclaimer.ts",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Resources/DisclaimerCopy.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Camera purpose string predates clinical-photo capture",
+     "detail": "FaceMap/Info.plist NSCameraUsageDescription says the camera is used 'to construct a 3D face model for aesthetic analysis' \u2014 written before v0.5. The app now also stores full clinical photographs per pose (FaceCaptureView.swift:84-94). Apple reviews purpose strings for accuracy, and more importantly the patient-consent attestation in the disclaimer ('the patient has consented to having their face captured', DisclaimerCopy.swift:19-20) is anchored to what the practitioner believes is captured; storing identifiable photos under a mesh-only description understates the data collected. The App Store privacy nutrition label will likewise need to declare photo collection.",
+     "severity": "low",
+     "recommendation": "Update NSCameraUsageDescription to mention both the 3D mesh and clinical reference photographs stored with each visit, e.g. 'FaceMap uses the TrueDepth camera to capture a 3D face model and clinical reference photos for practitioner planning. Data stays on this device.'",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Info.plist",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift"
+     ],
+     "wave2Candidate": true
+    },
+    {
+     "title": "Disclaimer acceptance is an unversioned, untimestamped boolean",
+     "detail": "DisclaimerGate.swift:4 stores acceptance as @AppStorage(\"hasAcceptedDisclaimerV1\") = true. There is no record of when it was accepted or which copy revision was shown, and the practitioner/consent attestation ('I am a licensed practitioner \u2014 continue', DisclaimerGate.swift:45) is the app's main regulatory shield. If the disclaimer text materially changes (it already did once when the calibration paragraph was added without bumping V1), existing users never see the new terms. For a defensible audit trail you want at least {acceptedAt, copyVersion}.",
+     "severity": "low",
+     "recommendation": "Store an acceptance record (date + a disclaimerVersion constant bumped whenever firstLaunchBody materially changes) and re-present the gate when the stored version is older than the current one. Show the acceptance date in More \u2192 About.",
+     "files": [
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DisclaimerGate.swift",
+      "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Resources/DisclaimerCopy.swift"
+     ],
+     "wave2Candidate": true
+    }
+   ]
+  }
+ ],
+ "synthesis": {
+  "executiveSummary": "Five auditors converge on one verdict: FaceMap's single-visit experience is polished, but the differentiating longitudinal journey is broken end-to-end. All five flagged variants of the same blocker \u2014 \"Add visit\" never binds a capture to its patient (PatientDetailScreen.swift:89-98 \u2192 AnalysisScreen.swift:442-459 \u2192 CaseStore.swift:80-84), the promised re-bind UI doesn't exist, and CaptureScreen never resets between sessions, risking cross-patient mesh mixing. Security found a second genuine blocker: clinical photos stored via .externalStorage escape the iCloud-backup exclusion in FaceMapApp.swift:33-48, and the Face ID lock toggle is decorative. The flagship ComparisonScreen renders surface displacement in wrong units (2mm shows as \"0.2%\") and has no export, while the PDF is stale, single-page, mis-formatted, and misattributes every report to Dr Nikolis. Wave 2 is organized into 7 disjoint work orders: (P0) core patient workflow + capture reliability, comparison correctness + PDF v2, privacy/security enforcement; (P1) data-integrity hardening + edge-case tests, design-system/brand/copy alignment across iOS and web, asset catalog + app icon; (P2) onboarding + disclaimer versioning. Deferred: encrypted local backup, structured treatment records, Data Protection entitlement, and Dynamic Type \u2014 each with reasons. Human actions center on on-device verification (especially the noise-floor check and verified ARKit landmark indices) and Dr Nikolis copy sign-off.",
+  "workOrders": [
+   {
+    "id": "WO-01",
+    "title": "Core patient workflow: visit binding, capture reliability, case lifecycle",
+    "area": "Workflow",
+    "priority": "P0",
+    "mission": "FaceMap is an iOS app (SwiftUI + SwiftData + ARKit TrueDepth) for aesthetic-medicine practitioners. Its headline value is visit-over-visit outcome tracking per patient, but that journey is broken. Fix the following in the listed files ONLY. IMPORTANT CONSTRAINTS: (1) do NOT create new .swift files \u2014 the Xcode project uses explicit PBXFileReference entries and project.pbxproj is owned by another work order; add new types inside the files you own. (2) Any new SwiftData model fields must be optional (lightweight migration) \u2014 but prefer no schema changes here. (3) Use existing Theme/Type design tokens (FaceMap/UI/DesignSystem/Theme.swift, Typography.swift) for all new UI. (4) Never alter the app's not-a-medical-device framing or disclaimer copy.\n\n1. PATIENT BINDING (blocker): PatientDetailScreen.swift:89-98 pushes a bare CaptureScreen() with a false comment 'binding handled in CaptureScreen save'. CaptureScreen takes no patient; AnalysisScreen's save sheet (AnalysisScreen.swift:442-459) creates PatientCase with patient == nil, and CaseStore.save (CaseStore.swift:80-84) silently dumps it into the 'Unassigned' bucket. Thread an optional `patient: Patient?` through CaptureScreen \u2192 AnalysisScreen \u2192 the save sheet. When present: pre-fill/lock the patient, auto-suggest label 'Visit N' (N = existing case count + 1), set pc.patient before store.save.\n\n2. SAVE SHEET REDESIGN: The sheet's TextField is titled 'Patient code (no PII)' with example 'P-014 Visit 2' (AnalysisScreen.swift:430-433) but the text is stored as a case label and the patient is ignored. Replace with: an explicit patient picker (existing active patients + 'New patient\u2026' inline + 'Unassigned' default when no patient was threaded) and a separate optional 'Visit label' field (footer e.g. 'Visit 2 \u2014 pre-treatment') defaulting to 'Visit N'.\n\n3. RE-BIND (blocker): The empty state at PatientListScreen.swift:85 promises 'an Unassigned bucket you can re-bind later' but no re-bind UI exists. Implement CaseStore.reassign(_ case:to patient:) and add 'Move to patient\u2026' via context menu on visit rows in PatientDetailScreen and a toolbar item in AnalysisScreen when existingCase != nil, presenting a patient picker with 'New patient' inline.\n\n4. CAPTURE SESSION RESET (blocker): CaptureScreen's @State (captures, photos, currentPose, poseInWindowSince) is never cleared after the 3-pose sequence completes (CaptureScreen.swift:78-96). Because the NavigationStack keeps the view alive, a later session leaves currentPose at .obliqueR with stale frontal/obliqueL meshes \u2014 the next snapshot mixes poses from two different visits (clinically dangerous cross-patient data). Reset all capture state once a MultiPoseCapture is finalized (or in .onAppear when all poses are filled). Add a 'Start over' button and per-pose retake (tapping a completed segment in the progress bar recaptures that pose).\n\n5. CAMERA PERMISSION / AR SESSION FAILURE: FaceCaptureView.swift never checks AVCaptureDevice.authorizationStatus and the Coordinator (FaceCaptureView.swift:41-62, also see FaceCaptureCoordinator.swift) implements no session(_:didFailWithError:), sessionWasInterrupted, or sessionInterruptionEnded. Denied camera leaves 'Position your face in front of the camera' forever (CaptureScreen.swift:171-172). Add a pre-flight authorization check and the three missing ARSessionDelegate methods; introduce .permissionDenied / .sessionFailed / .interrupted TrackingState cases that CaptureScreen renders as an explanatory card with an 'Open Settings' button (UIApplication.openSettingsURLString). On interruption/failure, clear the frame buffer (recentGeometries) and pendingSnapshot; reset poseInWindowSince/isCapturing when scenePhase != .active; re-verify the yaw window at snapshot time and drop snapshots whose yaw left the window. Also: guard the frame-averaging buffer so only samples with vertices.count == recentGeometries[0].vertices.count are averaged (FaceCaptureView.swift:68-72), and when currentFramePhotoJPEG returns nil (FaceCaptureView.swift:90-95) surface a non-blocking warning in CaptureScreen ('Mesh captured; clinical photo failed \u2014 retake?').\n\n6. SAVE FAILURE SURFACING: CaseStore.save catches context.save() errors and only logs (CaseStore.swift:85-91) while the save sheet dismisses unconditionally (AnalysisScreen.swift:456-458). Make CaseStore.save throw (or return Result); on failure keep the sheet open and show an alert ('Could not save this visit \u2014 try again'). Route ALL remaining `try? context.save()` sites in CaseStore (lines 34, 48, 58, 64, 69, 75, 96) through one persist(_ operation:) helper that does do/try/catch, logs via the existing redacting Logger (subsystem 'com.fuanne.facemap', CaseStore.swift:12), and exposes a published lastSaveError driving an alert. Apply the same to notes/annotation saves in AnalysisScreen.swift:142 and :170. Debounce the per-keystroke notes save (1-2s debounce + save on sheet dismiss) and cap notes at 20,000 chars with a counter.\n\n7. ARCHIVE SAFETY: Swipe-to-delete archives with no confirmation (PatientListScreen.swift:32-34), the menu 'Archive patient' likewise (PatientDetailScreen.swift:55-57), and CaseStore.unarchive/deletePatient (CaseStore.swift:67-76) are never called from any view. Use custom .swipeActions labeled 'Archive' (non-destructive tint, not red Delete), confirm before archiving, and add an 'Archived' section/filter in PatientListScreen exposing Unarchive and permanent Delete (with confirmation).\n\n8. VISIT LIFECYCLE: CaseStore.delete(patientCase:) (CaseStore.swift:93-98) is never invoked. Add swipe-to-delete (with confirmation) and 'Rename visit' context-menu actions on visit rows in PatientDetailScreen.\n\n9. COMPARE DISCOVERABILITY: Comparison currently requires ellipsis menu \u2192 'Compare visits' \u2192 multi-select exactly two \u2192 small 'Compare 2/2' link (PatientDetailScreen.swift:48-53, 232-239). Add a prominent 'Compare with previous' button on the latest-visit card whenever \u22652 visits exist (pre-selecting the two most recent); keep multi-select for arbitrary pairs; remove the unreachable fallback string 'Pick exactly two visits to compare.' (PatientDetailScreen.swift:69).\n\n10. VALIDATION & SEARCH: CaseStore.createPatient substitutes 'Untitled' silently and allows duplicate codes (CaseStore.swift:54-59), as does the rename sheet (PatientDetailScreen.swift:327-353) \u2014 show inline 'This code is already in use'. Extend search (PatientListScreen.swift:71-75) to match visit labels and notes, show matching-visit subtitles, and add a 'No patients match \"<query>\"' empty state.\n\n11. COPY FIXES in owned files: replace the '<domains> metrics arrive in v0.3.' footnote (AnalysisScreen.swift:254) with 'No <domain> metrics for this capture'; replace 'Coming soon' trend-card text (PatientDetailScreen.swift:180) with 'No data yet'. Add an isEvaluating loading state to AnalysisScreen so a 'Analyzing\u2026' placeholder shows on first metric computation and stale findings are cleared/dimmed during pose-switch recomputes (AnalysisScreen.swift:150-154, 203, 415-422). When face.vertexCount is 0 (or < 100), show 'Capture invalid \u2014 please recapture' and disable Save. For the PDF export button's silent failures (AnalysisScreen.swift:510-519), alert 'Could not generate the PDF for this visit' on nil patient / nil data / write failure and show a brief progress overlay. Finally, stop using Theme.domainSymmetry (pink, a clinical facet hue) for the pose chip and unsupported-device badge in CaptureScreen.swift:133,163 \u2014 use Theme.ink/inkMuted for the chip and an inline amber Color for the error badge with a '// TODO: migrate to Theme.warning token' comment.",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientDetailScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/PatientListScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CaptureScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/AnalysisScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ContentView.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/CaseStore.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureView.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/FaceCaptureCoordinator.swift"
+    ],
+    "acceptanceCriteria": [
+     "Starting capture from PatientDetailScreen 'Add visit' for patient P-001 and saving lands the visit in P-001's timeline (not Unassigned), with label defaulting to 'Visit N'",
+     "An Unassigned case can be moved to an existing or newly created patient via 'Move to patient\u2026' from both PatientDetailScreen visit rows and a saved case's AnalysisScreen toolbar",
+     "After completing a 3-pose session, re-entering CaptureScreen shows a fully reset state (no filled progress segments); a 'Start over' control and per-pose retake exist",
+     "With camera permission denied, CaptureScreen shows an explanatory card with a working 'Open Settings' button instead of 'Position your face\u2026'",
+     "A failing CaseStore.save keeps the save sheet open and shows an error alert; no try? context.save() remains in CaseStore.swift",
+     "Archiving requires confirmation, uses an 'Archive' (not 'Delete') swipe action, and archived patients are listable, unarchivable, and permanently deletable with confirmation",
+     "Visits can be deleted (with confirmation) and renamed from PatientDetailScreen",
+     "A 'Compare with previous' one-tap affordance appears whenever a patient has \u22652 visits",
+     "Duplicate patient codes are rejected with inline feedback on create and rename; search matches visit labels/notes and shows a no-results state",
+     "No user-visible string mentions 'v0.3' or 'Coming soon' in the edited files; project builds (xcodebuild -scheme FaceMap build) and existing FaceMapTests pass"
+    ]
+   },
+   {
+    "id": "WO-02",
+    "title": "Data-integrity hardening and edge-case test suite",
+    "area": "Hardening",
+    "priority": "P1",
+    "mission": "FaceMap (iOS, SwiftData persistence, ARKit 1220-vertex face meshes) stores patient meshes as JSON blobs and calibration data in UserDefaults. The persistence seams are fragile: structurally-valid-but-corrupt data can hard-crash the app. Fix and test the following, in the listed files ONLY. CONSTRAINTS: (1) do NOT create new .swift files \u2014 the Xcode project uses explicit file references and project.pbxproj is owned by another work order; add new XCTestCase classes inside the existing test files listed below (multiple test classes per file is fine). (2) Do NOT change public initializer signatures that other files call (e.g. PatientCase.init is called from AnalysisScreen, which another agent owns) \u2014 validate and log instead. (3) Any new SwiftData fields must be optional. (4) Do not touch UI files.\n\n1. CapturedFace (FaceMap/Capture/CapturedFace.swift): synthesized Codable accepts any [Float]/[Int16]. The `vertices` accessor strides vertexData by 3 with no multiple-of-3 check (lines 39-48) \u2014 a truncated array traps; `transform` indexes d[0]\u2026d[15] with no count check (lines 50-58); FaceMeshOverlay.swift:219 maps triangle indices with UInt32($0) \u2014 any negative Int16 traps. Write a custom init(from decoder:) that validates vertexData.count % 3 == 0, transformData.count == 16, triangleIndices.count % 3 == 0, and all indices in 0..<vertexCount, throwing DecodingError otherwise so failures flow into the existing nil \u2192 'Mesh unreadable' paths (PatientCase.capturedFace returns nil on decode failure, PatientCase.swift:88). Keep encoding unchanged for backward compatibility.\n\n2. PatientCase (FaceMap/Cases/PatientCase.swift): decode failures at lines 88, 93, 98, 114, 119 are silent `try?` \u2014 replace with do/catch + Logger (subsystem 'com.fuanne.facemap') so corrupt records leave a forensic trail, and expose a computed `isCorrupt`-style indicator (decodes attempted but failed) the UI can adopt later. The encode fallbacks at lines 56-57 substitute empty Data() for the entire mesh \u2014 log these as errors too (do not change the init signature this wave).\n\n3. Calibration stores (FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift, RegionCalibrationStore.swift): save() and calibrated() perform no validation (lines ~20-30, 43-49). Validate indices to 0..<1220 on both read and write, dropping invalid entries; wrap payloads in a small versioned envelope {version, savedAt, deviceModel, vertexCount, entries} with backward-compatible decoding of the current unversioned format; log (not silently swallow) decode/encode failures at lines 22 and 45 of each store.\n\n4. CalibrationMeshView (FaceMap/Visualization/CalibrationMeshView.swift): the picked-index guard checks only the upper bound (`idx < verts.count` at lines 151-153, `center < verts.count` at 171-172) \u2014 add `idx >= 0` / `center >= 0` so a negative persisted index cannot crash the calibration screen. Leave the MeshResource.generate try? at CalibrationMeshView.swift:225 and FaceMeshOverlay.swift:220 silent but add a brief '// intentionally silent: visual-only fallback' comment.\n\n5. SchemaMigrationPlan.swift: replace the silent try? at lines 61 and 64 with do/catch + Logger (a failed migration fetch/save must not be invisible).\n\n6. FaceLandmarkIndices.swift: the default seed indices (lines 35-58: 168 nasion, 133/362/33/263 canthi, 234/454 zygions) are canonical MediaPipe FaceMesh (468-vertex) indices, not ARKit 1220-vertex topology. Add a prominent doc comment stating the seeds are MediaPipe-derived, unverified on ARKit topology, and that uncalibrated values measure essentially arbitrary points (this also drives SurfaceChangeAnalyzer's stable-landmark offset cancellation).\n\n7. TESTS \u2014 add these as new XCTestCase classes inside the existing files listed (do not create new files): in PatientMigrationTests.swift: CapturedFace Codable round-trip; corrupt payloads (truncated vertexData, 15-float transform, negative triangle indices) decode to throw/nil rather than trap; PatientCase with empty Data \u2192 capturedFace == nil and metricResults == []; garbage JSON \u2192 nil; multiPoseCapture reassembly (PatientCase.swift:103-111). In LandmarkCalibrationStoreTests.swift and RegionCalibrationStoreTests.swift: negative/huge indices rejected; corrupt Data under the UserDefaults key degrades gracefully with logging; versioned-envelope round-trip and legacy-format read. In MetricRegistryTests.swift: evaluateAll on a zero-vertex AnalyzableFace returns every metric's NaN/'Unavailable' failure result without trapping. In SurfaceChangeAnalyzerTests.swift: pin noiseFloorMeters == 0.0003 and test exceedsNoiseFloor boundary behavior at exactly 0.3mm. Also add CapturePose window-math tests (contains/yawError at \u00b15\u00b0 boundaries, sign conventions) and HeadPose.from(transform:) Euler decomposition tests (identity and 30\u00b0-yaw transforms) \u2014 place these classes in SurfaceChangeAnalyzerTests.swift or MetricRegistryTests.swift. Use/extend SyntheticFace.swift helpers as needed.",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Capture/CapturedFace.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/PatientCase.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Cases/SchemaMigrationPlan.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/FaceMeshOverlay.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Visualization/CalibrationMeshView.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/LandmarkCalibrationStore.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/RegionCalibrationStore.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Analysis/Landmarks/FaceLandmarkIndices.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/PatientMigrationTests.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/LandmarkCalibrationStoreTests.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/RegionCalibrationStoreTests.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/MetricRegistryTests.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/SurfaceChangeAnalyzerTests.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMapTests/SyntheticFace.swift"
+    ],
+    "acceptanceCriteria": [
+     "Feeding truncated vertexData, a 15-float transform, or negative triangle indices through JSONDecoder produces a thrown DecodingError (never a runtime trap), verified by passing unit tests",
+     "A valid pre-existing CapturedFace JSON blob still decodes identically (round-trip test passes)",
+     "Both calibration stores reject out-of-range/negative indices on save and read, survive corrupt Data under their UserDefaults keys, and persist a versioned envelope while still reading the legacy format",
+     "CalibrationMeshView bounds guards include the negative case",
+     "No silent try? remains in PatientCase decode paths, SchemaMigrationPlan, or the calibration stores (all log via the com.fuanne.facemap Logger); the two MeshResource.generate sites carry an 'intentionally silent' comment",
+     "noiseFloorMeters == 0.0003 is pinned by a test; zero-vertex evaluateAll, CapturePose boundary, and HeadPose decomposition tests pass",
+     "No new .swift files were created; full test suite passes via xcodebuild test"
+    ]
+   },
+   {
+    "id": "WO-03",
+    "title": "Comparison correctness + before/after report and PDF v2",
+    "area": "Reports",
+    "priority": "P0",
+    "mission": "FaceMap differentiates from 2D competitors on 3D visit-over-visit comparison, but the ComparisonScreen mis-formats units and the PDF (TreatmentPlanPDF) predates the current feature set (clinical photos per pose, region projection changes, 8 metrics including photo-based skin quality). Rebuild reporting in the listed files ONLY. CONSTRAINTS: (1) do NOT create new .swift files \u2014 the Xcode project uses explicit file references and project.pbxproj is owned elsewhere; add new types (MetricValueFormatter, ComparisonReportPDF, PDFType) inside the Reports files you own. (2) Do NOT edit AnalysisScreen.swift or SurfaceChangeAnalyzer.swift (owned by other agents) \u2014 read them for reference only. (3) The not-a-medical-device disclaimer footer must remain on every PDF page. (4) Match Theme/Type design tokens in on-screen UI.\n\n1. SHARED METRIC FORMATTER (P0 bug): ComparisonScreen.formatValue (ComparisonScreen.swift:329-336) special-cases only canthal tilt and asymmetry; SurfaceDisplacementMetric (meters), ExpressionAsymmetryMetric (unitless ratio), and the skin-quality texture index fall into a default '%.1f%%' branch that multiplies by 100 \u2014 a 2mm projection deficit renders as '0.2%'. Create a MetricValueFormatter type (place it in PDFTheme.swift or TreatmentPlanPDF.swift) covering all 8 metric ids, mirroring the correct per-metric formats in AnalysisScreen.formatValue (AnalysisScreen.swift:536-560 \u2014 read, don't edit). Use it in ComparisonScreen and both PDFs. formatPDFValue (TreatmentPlanPDF.swift:287-297) has the same wrong-units bug \u2014 replace it with the shared formatter.\n\n2. PDF v2 (TreatmentPlanPDF.swift + PDFTheme.swift): currently one fixed A4 page (begins exactly one PDF page, TreatmentPlanPDF.swift:30-38; footer hardcodes 'Page 1 of 1' at :270), relies on a Spacer (:81) so content silently compresses/clips, shows only a black mesh snapshot (:128-141) and no photos. Rebuild as multi-page (loop context.beginPDFPage): PAGE 1 (patient-facing): header (brand mark, practitioner, patient code, visit date); 3-up clinical-photo triptych (oblique L / frontal / oblique R from PatientCase.photos, ~160pt tall, 6pt radius, captions; graceful placeholder when a photo is missing); aesthetic wheel with adequate bleed margin so labels at radius*1.02 don't clip; 'Key findings' box with the top 3 non-normal metrics in plain language; signature block. PAGE 2 (clinical detail): metric table grouped by FAS facet with facet-hue tab per group, unit-correct values via MetricValueFormatter; 'Change since last visit' region-projection table (computed via SurfaceChangeAnalyzer when a prior visit for the same patient exists) with the \u00b10.3mm noise-floor note; annotation pins; notes (paginating to page 3+ instead of clipping); calibration strip and the existing disclaimer footer on EVERY page. Add a PDFType enum in PDFTheme.swift (display 24 serif tracked, sectionHeader 9 semibold tracked, body 10, metricName 10.5 serif, value 10 mono, caption 9, legal 8.5 minimum) and migrate all ~15 hardcoded .system(size:) calls; disclaimer/legal text must never render below 8.5pt.\n\n3. PRACTITIONER ATTRIBUTION (liability): TreatmentPlanPDF.swift:104 hardcodes 'Prepared by Dr Andreas Nikolis \u00b7 MD, FRCSC' and :248 a Nikolis signature line for every user. Read a practitioner name from UserDefaults key \"practitionerName\" (a Settings field for it is being added by another work order under exactly that key); when empty, render 'Prepared with FaceMap' and a blank signature line \u2014 never default to Dr Nikolis. Also replace the hardcoded calibration-warning amber at :235-238 with hex 0xB45309 ink on 0xFEF3C7 background (matching the in-app banner) with a '// TODO: Theme.warning token' comment.\n\n4. COMPARISON REPORT: ComparisonScreen has no export. Add a ComparisonReportPDF generator (new type inside TreatmentPlanPDF.swift or PDFTheme.swift): side-by-side frontal photos, region projection-change table with noise-floor note, metric A\u2192B delta table, day count, disclaimer footer. Add a share/export toolbar button on ComparisonScreen using the existing ShareSheet, with an error alert and progress overlay on failure (never a silent no-op).\n\n5. COMPARISON UX CORRECTNESS (ComparisonScreen.swift): (a) Delta salience is inverted at :286-295 \u2014 improved metrics get near-black ink (max weight) while worsened get a pastel facet hue. Use inline status colors: worsened = 0x9B3B2E desaturated brick, improved = 0x3E7C4F desaturated green, unchanged = Theme.inkMuted, paired with the existing 'Improved'/'Worsened' text labels; never use facet/domain hues (including Theme.domainSymmetry at :202 for 'projection lost') for status. (b) Region-change analysis silently hides on failure: the .task skips when either mesh is nil (:38-43) and SurfaceChangeAnalyzer returns [] on topology mismatch, with the section rendering only if non-empty (:165-167). Track a tri-state (loading / computed / incompatible) and render an explicit 'These two captures cannot be compared (mesh missing or topology mismatch)' card. (c) The photo row requires BOTH frontal photos (:134-148) \u2014 show it when EITHER exists, with a 'No photo recorded for this visit' placeholder on the missing side. (d) Add the existing CalibrationWarningBanner component to ComparisonScreen when LandmarkCalibrationStore.shared.isFullyCalibrated is false (region tracking depends on calibrated landmarks).\n\n6. SHARE-SHEET SECURITY (ShareSheet.swift): PDFShareItem.write (:22-32) writes to tmp with only [.atomic], never deletes, and sanitizes only '/'. Write to a unique tmp subdirectory with [.atomic, .completeFileProtection]; delete the file in UIActivityViewController.completionWithItemsHandler and on dismissal; sweep leftover FaceMap_*.pdf from tmp at first use; sanitize filenames to allowlist [A-Za-z0-9._-]; return a surfaced error (not silent nil) on write failure.",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/ComparisonScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/TreatmentPlanPDF.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/PDFTheme.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Reports/ShareSheet.swift"
+    ],
+    "acceptanceCriteria": [
+     "Surface displacement renders in mm and expression asymmetry as a unitless ratio in the ComparisonScreen delta table, matching AnalysisScreen's formats exactly for all 8 metric ids",
+     "TreatmentPlanPDF.generate produces \u22652 pages for a full case; 10,000-char notes paginate instead of clipping; the disclaimer footer appears on every page at \u22658.5pt",
+     "PDF page 1 contains the three clinical photos (or labeled placeholders) and a key-findings box; page 2 contains the facet-grouped metric table and, when a prior visit exists, a region-projection-change table with the \u00b10.3mm noise-floor note",
+     "No exported PDF mentions Dr Nikolis as preparer/signatory unless 'practitionerName' in UserDefaults is set to that value",
+     "ComparisonScreen has a working share/export button producing a before/after PDF, with a visible error alert on failure",
+     "Worsened deltas are visually heavier than improved ones using the brick/green status colors; no facet hue is used for status meaning",
+     "Incompatible/missing-mesh comparisons show an explicit explanatory card; a one-sided missing frontal photo shows a placeholder instead of hiding the row; the calibration banner appears on ComparisonScreen when uncalibrated",
+     "Exported PDFs are written with complete file protection, deleted after the share sheet completes, and filenames contain only [A-Za-z0-9._-]",
+     "Project builds and existing tests pass; no new .swift files created"
+    ]
+   },
+   {
+    "id": "WO-04",
+    "title": "Privacy and security enforcement: backup exclusion, biometric lock, snapshot redaction",
+    "area": "Hardening",
+    "priority": "P0",
+    "mission": "FaceMap stores identifiable patient face photos and 3D meshes on-device for medical practitioners. Three enforcement gaps must be closed in the listed files ONLY. CONSTRAINTS: (1) do NOT create new .swift files (Xcode project uses explicit file references; project.pbxproj is owned elsewhere) \u2014 add new views/types inside FaceMapApp.swift. (2) Do not edit ContentView.swift, DisclaimerGate.swift, or any other UI file (owned by other agents); wrap at the FaceMapApp/WindowGroup level. (3) Do not weaken the not-a-medical-device framing.\n\n1. BACKUP EXCLUSION (blocker): FaceMapApp.swift:33-48 excludes only the store file plus '-shm'/'-wal' sidecars from iCloud/Finder backup, but PatientCase marks the mesh blobs AND all three clinical photo JPEGs as @Attribute(.externalStorage) (PatientCase.swift:18,31-39 \u2014 read only, don't edit). SwiftData/Core Data writes external blobs to a separate '<store>_SUPPORT/_EXTERNAL_DATA/' directory next to the store, which the suffix loop never touches \u2014 so patient face photos currently travel into iCloud backups while only SQLite metadata is excluded. Fix robustly: relocate the store into a dedicated subdirectory of Application Support via ModelConfiguration(url:) and set isExcludedFromBackup on that whole directory (handling first-run migration of an existing store directory's files into the new location), or at minimum enumerate the store's parent directory and exclude the '_SUPPORT' / external-data directories and any other sidecars. Log (Logger subsystem 'com.fuanne.facemap') every path excluded and any failure. In DEBUG builds, assert after a save that every file under the store directory carries the exclusion flag.\n\n2. BIOMETRIC LOCK ENFORCEMENT: SettingsScreen.swift:7 defines @AppStorage(\"biometricLockEnabled\") with footer copy promising re-authentication 'before opening saved cases', but the flag is read nowhere else \u2014 LAContext is only used to authenticate toggling the switch (SettingsScreen.swift:147-164). Add a BiometricGate view inside FaceMapApp.swift wrapping the root content: when biometricLockEnabled is true, require LAContext.evaluatePolicy(.deviceOwnerAuthentication) (passcode fallback, not biometrics-only) on launch and whenever the scene returns to .active after backgrounding; until authenticated, show an opaque brand-styled lock screen (use Theme tokens) with a 'Unlock' retry button. Handle evaluatePolicy errors gracefully (e.g. passcode not set \u2192 show explanation, do not brick the app).\n\n3. APP-SWITCHER REDACTION: No scenePhase handling or privacy redaction exists anywhere; patient face photos on screen (clinical-photos sheet, comparison before/after) are written into the iOS app-switcher snapshot. Add a scenePhase observer at the WindowGroup level that overlays an opaque brand splash (logo on Theme canvas) whenever scenePhase != .active. This covers all screens at once and composes with the biometric gate.\n\n4. SETTINGS ADDITIONS (SettingsScreen.swift): add a 'Practitioner name & credentials' text field persisted to UserDefaults key exactly \"practitionerName\" (the PDF work order reads this key; default empty \u2014 never default to 'Dr Andreas Nikolis'), with a footer noting it appears on exported reports. Fix the stale cloud-sync copy at SettingsScreen.swift:84: 'Coming in Phase 2' \u2192 'Planned \u2014 Phase 5'. Keep the sync stub disabled.\n\n5. CAMERA PURPOSE STRING (Info.plist): NSCameraUsageDescription predates v0.5's clinical-photo capture and mentions only the 3D model. Update to: 'FaceMap uses the TrueDepth camera to capture a 3D face model and clinical reference photos for practitioner planning. Data stays on this device.'",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/FaceMapApp.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/SettingsScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Info.plist"
+    ],
+    "acceptanceCriteria": [
+     "After saving a case with photos, every file under the store's directory tree (including external-storage blob directories) has isExcludedFromBackup == true, verified by a DEBUG assertion/log walk",
+     "An existing store from the previous location/layout is still readable after the change (no data loss on upgrade)",
+     "With biometricLockEnabled on, relaunching or returning from background requires device-owner authentication before any patient data is visible; with it off, behavior is unchanged",
+     "Backgrounding the app on any screen shows an opaque brand overlay in the app switcher (no patient photos in snapshots)",
+     "SettingsScreen has a practitioner-name field persisted under the exact key 'practitionerName', defaulting to empty",
+     "NSCameraUsageDescription mentions both the 3D model and clinical reference photos and on-device storage; sync copy says Phase 5",
+     "Project builds; no new .swift files created; no edits outside the three listed files"
+    ]
+   },
+   {
+    "id": "WO-05",
+    "title": "Design-system, brand, and copy alignment across iOS and web",
+    "area": "Design",
+    "priority": "P1",
+    "mission": "FaceMap's brand is a 5-facet FAS (Facial Assessment Scale) wheel, but iOS and web disagree on facet colors, the wheel double-books a quadrant, three screens bypass the design system, and About/disclaimer copy contradicts the 5-facet framework. Fix in the listed files ONLY. CONSTRAINTS: (1) do NOT create new .swift files (explicit-file-reference Xcode project; pbxproj owned elsewhere). (2) Do NOT edit AnalysisScreen, CaptureScreen, ComparisonScreen, PatientDetailScreen, SettingsScreen, DisclaimerGate, or Reports files (owned by other agents). (3) The not-a-medical-device disclaimer meaning must not change; copy fixes below are factual corrections only. (4) FaceDomain has 5 cases: skinQuality, facialShape, proportions, symmetry, expression.\n\n1. COLOR UNIFICATION (web is source of truth): web/lib/tokens.ts:36-41 facetHues define skinQuality=#C9BBEE (lavender), facialShape=#A6B4DD, proportions=#7A8094 (slate), symmetry=#E9B5E0, expression=#F2C9A1 (peach). iOS Theme.swift:31-36 currently has skinQuality=0x7A8094 and expression=0xC9BBEE (swapped/wrong) and proportions=0x9AB2D6 (exists nowhere on web). Update Theme.swift to: domainSkinQuality=0xC9BBEE, domainFacialShape=0xA6B4DD, domainProportions=0x7A8094, domainSymmetry=0xE9B5E0, domainExpression=0xF2C9A1. Add mirror-pointer comments in both Theme.swift and tokens.ts ('keep in sync with <other file>'). Do not change web hex values.\n\n2. STATUS TOKENS: Theme has no semantic status colors, so screens steal facet hues for status. Add to Theme.swift: warning=0xB45309, warningBg=0xFEF3C7, warningInk=0x78350F, positive=0x3E7C4F, negative=0x9B3B2E, plus a comment forbidding facet hues for non-facet meaning. Migrate CalibrationWarningBanner.swift:11-29 (currently hardcodes those ambers) to the tokens, and strengthen its copy to state values are 'not anatomically meaningful until calibrated'. Use positive for the 'picked' confirmation in CalibrationScreen.swift:150 and RegionCalibrationScreen.swift:156 (currently system .green).\n\n3. FIVE-SECTOR WHEEL: AestheticWheel.swift:196-207 maps BOTH .skinQuality and .expression to the (180,270) quadrant \u2014 their gradient fills overpaint each other, labelOverlay (:156-171) renders 'SKIN QUALITY' and 'EXPRESSION' on top of each other (including in the exported PDF), and domain(forAngle:) (:219-228) always resolves that tap to .skinQuality, making Expression unreachable from the wheel. Implement five 72\u00b0 sectors anchored with Skin Quality starting at 12 o'clock, in FaceDomain.allCases order; update quadrantBoundsDegrees, domain(forAngle:), and label placement (slight radial offset or adjusted anchors so labels at 72\u00b0 spacing don't collide; ensure labels fit within the declared frame so PDF rendering doesn't clip at radius*1.02). Keep the 3-ring severity geometry untouched. Update LogoMark.swift to a matching 5-slice mark and fix its stale doc comment (lines 3-10 reference deleted tokens domainOptical/domainStructural/domainMechanical); update WheelGlyph.swift if it renders quadrants. Update web/components/brand-mark.tsx to five 72\u00b0 arcs using facetHues (it currently draws 4 quadrants from an old domainHues object, lines 13-16).\n\n4. TYPE SCALE: Typography.swift bottoms out at 11pt, so components hardcode micro sizes. Add Type.micro (9pt semibold, tracked), Type.labelSmall (10pt semibold), Type.button (16pt medium), Type.control (14pt semibold). Migrate hardcoded .system(size:) call sites within files you own: AestheticWheel.swift:167,178; DomainBadge.swift:15; SummaryHeader.swift:46; BrandMark.swift:54; MetricRow.swift:35 and CategoryRow.swift:60 (12pt semibold duplicating captionStrong); Buttons.swift:6,22; MeshFullScreen.swift:33.\n\n5. OFF-SYSTEM SCREENS: CalibrationScreen.swift, RegionCalibrationScreen.swift, and MeshFullScreen.swift use zero Theme/Type tokens (system blue .borderedProminent buttons, raw Color.cyan at CalibrationScreen.swift:121, system fonts). Migrate them to Type.* fonts, Theme ink/surface tokens, and the existing PrimaryButton/SecondaryButton styles; mesh-viewport overlays may keep white-on-black but must use Type sizes. While in CalibrationScreen: 'Reset all' (lines 218-223) clears the persistent calibration store immediately even if the user backs out without saving \u2014 gate it behind a confirmation dialog and defer the store clear until Save.\n\n6. SEVERITY REDUNDANCY: SeverityDot encodes severity by hue+opacity alone (SeverityDot.swift:10-16; mild = facet hue at 0.38 opacity is near-invisible and fails color-vision deficiency). Add non-color redundancy (e.g. 0-3 filled ring segments) while keeping current colors.\n\n7. COPY (MoreTab.swift + DisclaimerCopy.swift + web): MoreTab.swift:48 hardcodes 'v0.2.0' \u2014 read CFBundleShortVersionString from Bundle instead. MoreTab.swift:90 'THE FOUR-DOMAIN FRAMEWORK' sits above five facets \u2014 change to 'THE FIVE FAS FACETS'. DisclaimerCopy.aboutNikolis (DisclaimerCopy.swift:36-46) describes a different four-domain taxonomy (Mechanical/Optical/Symmetry/Structural) \u2014 rewrite to describe the actual five-facet FAS and add a '// PLACEHOLDER \u2014 pending Dr Nikolis review' comment. DisclaimerCopy.swift:15-17 instructs calibrating via 'More \u2192 Calibrate landmarks' but that screen is a read-only explainer; correct the copy to describe the real path (the scope icon in a captured case's Analysis toolbar) without weakening the warning. Then sync web/content/disclaimer.ts verbatim with the final Swift copy (it is missing the calibration paragraph and its header comment cites a stale path \u2014 the source is now FaceMap/Resources/DisclaimerCopy.swift). Finally, web/content/metrics.ts documents only the 5 v0.1 metrics \u2014 add entries for surface displacement (Z-deficit, mm, facialShape facet), expression asymmetry (unitless ratio, expression facet), and photo-based skin quality (texture index, skinQuality facet), matching the Swift metric ids/names/targets in FaceMap/Analysis/Metrics/*.swift (read-only reference). Update its header comment.",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Theme.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Typography.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/AestheticWheel.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/LogoMark.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/WheelGlyph.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/SeverityDot.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/DomainBadge.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/Buttons.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/CalibrationWarningBanner.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/SummaryHeader.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/BrandMark.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/MetricRow.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DesignSystem/Components/CategoryRow.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/CalibrationScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/RegionCalibrationScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MeshFullScreen.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/MoreTab.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Resources/DisclaimerCopy.swift",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/lib/tokens.ts",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/components/brand-mark.tsx",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/content/disclaimer.ts",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/web/content/metrics.ts"
+    ],
+    "acceptanceCriteria": [
+     "Theme.swift facet hues exactly match web/lib/tokens.ts facetHues (lavender=skinQuality, slate=proportions, peach=expression) and both files carry mirror-sync comments",
+     "AestheticWheel renders five distinct 72\u00b0 sectors; tapping each sector resolves to its own FaceDomain (Expression reachable); no overlapping labels at any rendered size including the PDF's 200pt frame",
+     "LogoMark and web brand-mark.tsx both render five slices in matching order; stale token names removed from comments",
+     "Theme exposes warning/warningBg/warningInk/positive/negative; CalibrationWarningBanner and the two calibration screens use them; no system .green/.cyan/default-blue buttons remain in the three migrated screens",
+     "Typography gains micro/labelSmall/button/control and the listed hardcoded font call sites in owned files use tokens",
+     "CalibrationScreen 'Reset all' requires confirmation and does not clear the persistent store until Save",
+     "MoreTab shows the Bundle version (not v0.2.0) and 'THE FIVE FAS FACETS'; DisclaimerCopy describes the real calibration path and a five-facet aboutNikolis (marked pending review); web disclaimer.ts is verbatim-identical to the final Swift strings",
+     "web/content/metrics.ts lists 8 metrics matching Swift metric ids; `npm run build` (or next build) succeeds in web/; iOS project builds and tests pass"
+    ]
+   },
+   {
+    "id": "WO-06",
+    "title": "Asset catalog, app icon (light/dark/tinted), and accent color",
+    "area": "Assets",
+    "priority": "P1",
+    "mission": "FaceMap has NO asset catalog: no .xcassets exists anywhere in the repo, yet both build configurations set ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon (FaceMap.xcodeproj/project.pbxproj:729 and :746), so the app ships with a blank icon and App Store submission would fail. You are the ONLY work order permitted to edit project.pbxproj (the project uses explicit PBXFileReference entries, objectVersion 77, no filesystem-synchronized groups \u2014 you must add the asset catalog reference and build-phase membership by hand or convert the relevant group carefully).\n\nDELIVERABLES:\n1. Create /Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Assets.xcassets with Contents.json ({\"info\":{\"author\":\"xcode\",\"version\":1}}).\n2. AppIcon.appiconset using the modern single-size form: a 1024x1024 universal iOS entry plus dark-appearance and tinted-appearance entries (appearances: [{appearance: luminosity, value: dark}] and [{appearance: luminosity, value: tinted}]).\n3. ICON DESIGN (fully specified \u2014 generate programmatically, no human asset needed): the icon is the FAS wheel brand mark, no wordmark, no face imagery. Geometry mirrors web/components/brand-mark.tsx (read-only reference): full-bleed circle of radius 15/16 of half-width centered on canvas; central hub of radius 4/15 of the outer radius; FIVE 72\u00b0 sectors starting at 12 o'clock, separated by gaps/slits of ~2.5% of canvas width in the background color; a thin ink ring (color 0x0A0A0F, ~3% width) around the outer circle; hub filled with the background color plus a hairline 0x0A0A0F ring. Sector colors in clockwise order from 12 o'clock (the unified FAS facet palette): 0xC9BBEE, 0xA6B4DD, 0x7A8094, 0xE9B5E0, 0xF2C9A1. Light variant: background 0xFAFAFA. Dark variant: same sectors on 0x0A0A0F background, hub 0x0A0A0F. Tinted variant: monochrome \u2014 sectors as white at opacity steps 0.38 / 0.52 / 0.64 / 0.82 / 1.0 (clockwise) on transparent/black per Apple tinted-icon guidance.\n4. GENERATION: write a small generator script (e.g. scripts/generate_app_icon.swift using CoreGraphics, runnable via `swift scripts/generate_app_icon.swift`) that emits the three 1024x1024 PNGs into the appiconset; commit both script and PNGs. Verify the PNGs are non-empty and 1024x1024 (e.g. via sips).\n5. AccentColor.colorset with universal color 0x0A0A0F, and set ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor in both build configurations.\n6. Wire Assets.xcassets into the FaceMap app target: PBXFileReference, group membership, and Resources build phase in project.pbxproj.\n\nCONSTRAINTS: touch ONLY project.pbxproj, the new Assets.xcassets tree, and the new scripts/ file. Do not modify any Swift source. Do not change any other build setting. Verify with `xcodebuild -scheme FaceMap -destination 'generic/platform=iOS' build` (or simulator destination) that the catalog compiles and the build succeeds.",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap.xcodeproj/project.pbxproj",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/Assets.xcassets",
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/scripts/generate_app_icon.swift"
+    ],
+    "acceptanceCriteria": [
+     "FaceMap/Assets.xcassets exists with valid Contents.json files (actool-parseable) and is a member of the app target's Resources build phase",
+     "AppIcon.appiconset contains light, dark, and tinted 1024x1024 PNGs matching the specified 5-sector wheel geometry and palette, generated by the committed script",
+     "AccentColor.colorset (0x0A0A0F) exists and ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor is set in both configurations",
+     "xcodebuild build succeeds with no asset-catalog warnings about missing AppIcon",
+     "No Swift source files or unrelated build settings were modified"
+    ]
+   },
+   {
+    "id": "WO-07",
+    "title": "First-run onboarding cards and versioned disclaimer acceptance",
+    "area": "Onboarding",
+    "priority": "P2",
+    "mission": "FaceMap (SwiftUI iOS app for aesthetic practitioners) has no first-run experience: after the legal disclaimer gate, a new user lands on an empty patient list, then a camera with yaw-degree prompts, with nothing explaining the five-facet Facial Assessment Scale (FAS) that organizes the product \u2014 'FAS' never appears in any UI string today. Separately, disclaimer acceptance is an unversioned boolean: DisclaimerGate.swift:4 stores @AppStorage(\"hasAcceptedDisclaimerV1\") = true with no timestamp and no copy-version record, so when disclaimer text materially changes (it already did once), existing users never see the new terms \u2014 a weak audit trail for the app's main regulatory shield.\n\nYou may edit ONLY /Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DisclaimerGate.swift. CONSTRAINT: do NOT create new .swift files (the Xcode project uses explicit file references and project.pbxproj is owned by another work order) \u2014 implement the onboarding views as additional types inside DisclaimerGate.swift. Do NOT edit DisclaimerCopy.swift (owned by another agent \u2014 reference its properties as they exist). The existing disclaimer text and the 'I am a licensed practitioner \u2014 continue' attestation flow must remain intact and blocking; the not-a-medical-device framing is non-negotiable.\n\n1. VERSIONED ACCEPTANCE: introduce a `static let disclaimerVersion = 2` constant (with a comment: bump whenever DisclaimerCopy.firstLaunchBody materially changes) and persist {acceptedVersion: Int, acceptedAt: Date} (e.g. two @AppStorage keys 'disclaimerAcceptedVersion' and 'disclaimerAcceptedAt'). Migrate: if the legacy 'hasAcceptedDisclaimerV1' bool is true and no version is recorded, treat as version 1. Re-present the full disclaimer gate whenever storedVersion < disclaimerVersion. Keep the legacy key written for backward compatibility.\n\n2. ONBOARDING CARDS: after first-time acceptance only (not on re-acceptance after a version bump, and skippable at any point), present a 3-card intro using existing design tokens (Theme/Type from FaceMap/UI/DesignSystem) and existing components where convenient (AestheticWheel, LogoMark are available): Card 1 \u2014 'The Facial Assessment Scale': FaceMap organizes findings into five FAS facets (Skin Quality, Facial Shape, Proportions, Symmetry, Expression), each shown as a sector of the aesthetic wheel; severity is shown by ring depth, not a score. Card 2 \u2014 'Three-pose capture': each visit captures a frontal and two oblique (\u00b130\u00b0) TrueDepth scans plus clinical reference photos; the app coaches head position automatically. Card 3 \u2014 'Calibrate once for meaningful values': metric values are not anatomically meaningful until landmark indices are calibrated on a captured case (Analysis screen \u2192 scope icon in the toolbar); until then a warning banner appears on every analysis. Wording must stay descriptive and instrument-like \u2014 no diagnostic or treatment-recommendation claims. Persist a 'hasSeenOnboarding' flag; add a way to replay later only if trivially possible from within DisclaimerGate (otherwise skip replay \u2014 More-tab entry is owned by another agent and is backlogged).",
+    "files": [
+     "/Users/fuannegao/Documents/PERSONAL_WEBSITE/FACEMAP/FaceMap/UI/DisclaimerGate.swift"
+    ],
+    "acceptanceCriteria": [
+     "Fresh install: disclaimer gate \u2192 acceptance records version 2 + timestamp \u2192 3 onboarding cards (skippable) \u2192 app; second launch shows neither",
+     "A device with only the legacy hasAcceptedDisclaimerV1 == true does NOT re-see the gate until disclaimerVersion is bumped above 1... (legacy bool maps to version 1, current version 2 triggers one re-presentation \u2014 verify this is the intended behavior and document the chosen mapping in a comment)",
+     "Bumping disclaimerVersion re-presents the full gate to previously accepted users without re-showing onboarding cards",
+     "Onboarding copy names the five FAS facets, the 3-pose capture, and the real calibration path (Analysis toolbar scope icon), with zero diagnostic/medical-claim language",
+     "All new UI uses Theme/Type tokens; only DisclaimerGate.swift was modified; project builds and existing tests pass"
+    ]
+   }
+  ],
+  "backlog": [
+   {
+    "title": "Encrypted local backup/export-import of the patient store (pre-Phase-5 stopgap)",
+    "priority": "P1",
+    "reason": "Highest-value deferred item (device loss destroys all longitudinal data), but it needs crypto/format design, a restore UX, and a product decision vs. accelerating Phase 5 sync; it would also contend for SettingsScreen/FaceMapApp, which WO-04 owns this wave."
+   },
+   {
+    "title": "Structured treatment record per visit (product, regions, volume) surfaced in Comparison",
+    "priority": "P1",
+    "reason": "PM explicitly marked it not Wave-2; requires new optional SwiftData fields, a region-picker UX, and clinical-input design review. Strong moat vs QOVES \u2014 schedule for Wave 3 with Dr Nikolis input."
+   },
+   {
+    "title": "Data Protection entitlement (NSFileProtectionComplete baseline)",
+    "priority": "P1",
+    "reason": "Requires an .entitlements file plus pbxproj changes (pbxproj is exclusively owned by WO-06 this wave) and human Apple Developer portal/provisioning steps; pair with on-device verification that ARKit capture still works under Complete protection."
+   },
+   {
+    "title": "Ship verified ARKit landmark indices as new FaceLandmarkIndices defaults",
+    "priority": "P1",
+    "reason": "Blocked on a human performing full on-device calibration (current seeds are MediaPipe 468-vertex indices, anatomically arbitrary on ARKit topology). WO-02 documents the provenance; replacing defaults needs real measured indices."
+   },
+   {
+    "title": "Consolidate AnalysisScreen.formatValue onto the shared MetricValueFormatter",
+    "priority": "P2",
+    "reason": "AnalysisScreen.swift is owned by WO-01 this wave; its formats are currently correct, so WO-03 mirrors them. One-file follow-up after both land to eliminate the duplicate switch."
+   },
+   {
+    "title": "Migrate inline status hexes (CaptureScreen error badge, ComparisonScreen delta colors, PDF warning strip) to the new Theme.warning/positive/negative tokens",
+    "priority": "P2",
+    "reason": "Tokens are added by WO-05 while the call sites live in WO-01/WO-03-owned files; both use the same hex values inline with TODO comments, so the sweep is mechanical once the wave merges."
+   },
+   {
+    "title": "Spacing scale (Theme.space) and ~13-value padding normalization sweep",
+    "priority": "P2",
+    "reason": "Low-severity visual-rhythm issue; the sweep touches nearly every UI file and would collide with every Wave-2 work order. Do it as a single mechanical pass after the wave merges."
+   },
+   {
+    "title": "Dynamic Type support: rebuild Typography with Font.system(size:relativeTo:)",
+    "priority": "P2",
+    "reason": "Real accessibility concern for 40-60-year-old practitioners, but needs layout QA across all screens; sequenced after WO-05's token additions to avoid churn."
+   },
+   {
+    "title": "Record actual yaw at snapshot time on CapturedFace + off-window capture quality flag",
+    "priority": "P2",
+    "reason": "Requires a new (optional) field on the capture payload and coordination between CaptureScreen (WO-01) and CapturedFace (WO-02) owners; WO-01's snapshot-time yaw re-verification covers the acute risk this wave."
+   },
+   {
+    "title": "Per-metric info affordances in AnalysisScreen rows reusing the domainBlurb explainers",
+    "priority": "P2",
+    "reason": "Valid UX finding ('worst |\u0394 from \u03c6| %' is unexplained jargon), but the rows live in AnalysisScreen/MetricRow which are split across WO-01/WO-05 this wave; onboarding (WO-07) covers first-contact education in the interim."
+   },
+   {
+    "title": "'Calibrate now' launching a throwaway capture from the calibration explainer; onboarding replay entry in More tab",
+    "priority": "P2",
+    "reason": "Crosses MoreTab (WO-05), CaptureScreen (WO-01), and CalibrationScreen (WO-05) ownership and needs a small flow design (calibration requires an already-captured face). WO-05 fixes the misleading disclaimer path copy now."
+   },
+   {
+    "title": "Cloud-delete retry queue and sync-stub logging (CaseStore.swift:87,97)",
+    "priority": "P2",
+    "reason": "Sync is a Phase-5 stub; pre-wiring failed-delete retention handling matters only when sync goes live. Flagged now so the Phase-5 design includes it as a privacy obligation."
+   },
+   {
+    "title": "Backup-exclusion unit test + CI disclaimer-sync check (Swift vs web/content/disclaimer.ts)",
+    "priority": "P2",
+    "reason": "Both are small guards that depend on WO-04's final store layout and WO-05's final copy respectively; add immediately after the wave merges. No CI pipeline exists yet for the iOS target, which is its own prerequisite."
+   },
+   {
+    "title": "Undecodable-case degraded detail view (open metrics/notes even when mesh is unreadable)",
+    "priority": "P2",
+    "reason": "WO-02 makes corrupt data non-crashing and loggable and WO-03 explains it in Comparison; replacing PatientDetailScreen's dimmed ghost row with a 'Mesh data unavailable' badge + degraded view is a follow-up in WO-01's files once isCorrupt (WO-02) exists."
+   }
+  ],
+  "userActions": [
+   "Run the QA on-device test script on a TrueDepth iPhone (iOS 17+) after Wave 2 lands \u2014 especially the same-face noise-floor comparison (regions should stay within \u00b10.3mm), mid-capture interruption checks (lock/notification during the 0.6s hold), and camera-permission-denied recovery. Only a human with the hardware can do this.",
+   "Perform the full 18-landmark on-device calibration using the vertex-index labels, record the verified ARKit vertex indices for each landmark, and hand them to engineering so the MediaPipe-derived placeholder defaults in FaceLandmarkIndices.swift can be replaced with anatomically correct seeds.",
+   "Get Dr Andreas Nikolis's sign-off on: the rewritten five-facet About bio (replacing the contradictory four-domain text), the 'THE FIVE FAS FACETS' framing, and the PDF attribution change (reports will no longer be signed in his name by default).",
+   "Apple Developer portal work: enable the Data Protection capability for the bundle ID (prerequisite for the backlogged NSFileProtectionComplete entitlement), and update the App Store privacy nutrition label to declare clinical photo collection alongside the 3D mesh data.",
+   "Visually sign off the generated app icon (light/dark/tinted) at small sizes \u2014 verify the five pastel sectors remain distinct at 60px and 29pt settings size on a real device.",
+   "Have legal/compliance review the versioned disclaimer re-acceptance flow (existing users will be re-presented the gate once) and confirm the acceptance audit-trail format ({version, date}) is sufficient.",
+   "Make the product call on interim data portability: approve or reject the encrypted local export/import stopgap versus accelerating Phase 5 cloud sync \u2014 this is the largest adoption blocker for paying practitioners and is currently parked in the backlog.",
+   "Decide retention policy questions surfaced by the archive/delete work: confirm that permanent patient deletion (added in WO-01) meets your data-retention obligations for the jurisdictions you market in."
+  ]
+ },
+ "deviceTestScript": "# FaceMap On-Device Test Script (PM journey verification)\n\nDevice: iPhone with TrueDepth (X or newer), app freshly installed.\n\n## 1. First run\n1. Launch FaceMap. Confirm the disclaimer gate appears; tap \"I am a licensed practitioner \u2014 continue\".\n2. Confirm you land on the Patients tab with the empty state. Note the copy promising an \"Unassigned bucket you can re-bind later\".\n\n## 2. Patient-first journey (the blocker)\n3. Tap \"Add patient\", create code `P-001`.\n4. Open P-001 \u2192 tap \"Add visit\" \u2192 complete the 3-pose capture (frontal, oblique L, oblique R).\n5. On the Analysis screen tap Save, enter label `Visit 1`, save.\n6. EXPECTED BUG: go back to P-001's detail screen \u2014 it still says \"No visits yet\". Return to the Patients list: a patient named \"Unassigned\" now exists and contains Visit 1.\n7. Try to find any way to move Visit 1 from Unassigned to P-001 (long-press the visit row, check Analysis toolbar, check menus). EXPECTED: none exists.\n\n## 3. Stale capture state (cross-visit mixing)\n8. Go to the Capture tab. Complete a full 3-pose session and reach Analysis WITHOUT saving; go back.\n9. Re-enter the Capture flow and let it auto-capture once. EXPECTED BUG: it captures only Oblique R and immediately jumps to Analysis using the frontal mesh from the PREVIOUS session.\n\n## 4. Comparison journey\n10. Under the Unassigned patient (or P-001 if you worked around step 6), save a second visit.\n11. In patient detail: tap ellipsis \u2192 \"Compare visits\" \u2192 select both visits \u2192 \"Compare 2/2\". Note how many taps this took.\n12. In the CHANGES table, find \"Surface displacement\". EXPECTED BUG: value shown as a tiny percentage (e.g. \"0.2%\") instead of mm.\n13. Look for any share/export button on the Compare screen. EXPECTED: none.\n\n## 5. Settings traps\n14. More \u2192 Settings \u2192 enable \"Lock with Face ID\" (authenticate). Force-quit and relaunch the app. EXPECTED BUG: app opens straight to patient data with no Face ID prompt.\n15. Patients list: swipe-archive a patient. Try to find/restore it anywhere. EXPECTED: impossible.\n\n## 6. Copy check\n16. More tab footer should read v0.2.0 (stale); About screen says \"FOUR-DOMAIN\" above five listed domains; Settings sync says \"Phase 2\"."
+}
