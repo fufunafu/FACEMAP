@@ -2,6 +2,10 @@ import SwiftUI
 
 /// "More" tab — About / Settings / Calibration explainer / Disclaimer re-read.
 struct MoreTab: View {
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
     var body: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
@@ -45,7 +49,7 @@ struct MoreTab: View {
                 } header: {
                     Text("Legal").sectionHeaderStyle()
                 } footer: {
-                    Text("FaceMap by Dr Andreas Nikolis · v0.2.0")
+                    Text("FaceMap by Dr Andreas Nikolis · v\(appVersion)")
                         .font(Type.caption)
                         .foregroundStyle(Theme.inkMuted)
                         .frame(maxWidth: .infinity, alignment: .center)
@@ -87,7 +91,7 @@ struct AboutScreen: View {
 
                     Divider().padding(.vertical, 8)
 
-                    Text("THE FOUR-DOMAIN FRAMEWORK").sectionHeaderStyle()
+                    Text("THE FIVE FAS FACETS").sectionHeaderStyle()
                     VStack(alignment: .leading, spacing: 12) {
                         ForEach(FaceDomain.allCases) { d in
                             HStack(alignment: .top, spacing: 12) {

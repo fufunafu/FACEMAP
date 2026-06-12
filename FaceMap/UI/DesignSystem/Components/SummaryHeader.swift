@@ -43,7 +43,7 @@ struct SummaryHeader: View {
                     )
 
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(Type.labelSmall)
                         .foregroundStyle(Theme.ink)
                         .padding(6)
                         .background(.regularMaterial, in: Circle())

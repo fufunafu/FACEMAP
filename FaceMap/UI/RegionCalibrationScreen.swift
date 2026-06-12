@@ -16,6 +16,10 @@ struct RegionCalibrationScreen: View {
     @StateObject private var meshController = FaceMeshController()
     @State private var stepIndex: Int = 0
     @State private var picked: [FacialRegion: [Int]] = [:]
+    @State private var showResetConfirmation = false
+    /// Set when the user confirms "Reset all" — the persistent store is only
+    /// cleared on Save, so backing out without saving keeps the old calibration.
+    @State private var pendingStoreClear = false
 
     private let order: [FacialRegion] = [
         .forehead,
@@ -76,8 +80,19 @@ struct RegionCalibrationScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Save") { saveAndDismiss() }
-                    .disabled(calibratedCount == 0)
+                    .disabled(calibratedCount == 0 && !pendingStoreClear)
             }
+        }
+        .background(Theme.canvas)
+        .confirmationDialog(
+            "Reset all painted regions?",
+            isPresented: $showResetConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reset all", role: .destructive) { resetAll() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Clears every painted region in this session. The saved calibration on this device is only removed when you tap Save.")
         }
         .onAppear {
             picked = RegionCalibrationStore.shared.calibrated()
@@ -96,21 +111,26 @@ struct RegionCalibrationScreen: View {
         VStack(spacing: 6) {
             HStack {
                 Text("\(calibratedCount) of \(order.count) regions painted")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .font(Type.caption.monospacedDigit())
+                    .foregroundStyle(Theme.inkDim)
                 Spacer()
-                Button("Reset all") { resetAll() }
-                    .font(.caption)
+                Button("Reset all") { showResetConfirmation = true }
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.negative)
                     .disabled(picked.isEmpty)
             }
             ProgressView(value: Double(calibratedCount), total: Double(order.count))
+                .tint(Theme.ink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
+        .background(Theme.canvas)
     }
 
     // MARK: - Viewer controls (preset + reset)
 
+    // Mesh-viewport overlay: white-on-black is deliberate (spotlight viewer),
+    // but sizes come from the Type scale.
     private var viewerControls: some View {
         HStack(spacing: 6) {
             ForEach(FaceViewPreset.allCases) { preset in
@@ -118,7 +138,7 @@ struct RegionCalibrationScreen: View {
                     meshController.setPreset(preset)
                 } label: {
                     Text(preset.label)
-                        .font(.caption.weight(.semibold))
+                        .font(Type.captionStrong)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                 }
@@ -130,7 +150,7 @@ struct RegionCalibrationScreen: View {
                 meshController.reset()
             } label: {
                 Image(systemName: "arrow.counterclockwise")
-                    .font(.caption.weight(.semibold))
+                    .font(Type.captionStrong)
                     .padding(8)
             }
             .background(.ultraThinMaterial, in: Circle())
@@ -145,42 +165,45 @@ struct RegionCalibrationScreen: View {
         VStack(spacing: 8) {
             if let region = current {
                 Text("Paint \(region.displayName)")
-                    .font(.headline)
+                    .font(Type.body.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
                 Text(regionHint(region))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Type.callout)
+                    .foregroundStyle(Theme.inkDim)
                     .multilineTextAlignment(.center)
                 Text(countLine(for: region))
-                    .font(.caption.monospacedDigit())
+                    .font(Type.caption.monospacedDigit())
                     .foregroundStyle(currentRegionPicks.count >= suggestedRange.lowerBound
-                                     ? .green : .secondary)
-                HStack {
+                                     ? Theme.positive : Theme.inkDim)
+                HStack(spacing: 8) {
                     Button("Undo") { undoLastPick() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.ghost)
                         .disabled(currentRegionPicks.isEmpty)
-                    Button("Clear region") { clearCurrentRegion() }
-                        .buttonStyle(.bordered)
+                    Button("Clear") { clearCurrentRegion() }
+                        .buttonStyle(.ghost)
                         .disabled(currentRegionPicks.isEmpty)
+                        .accessibilityLabel("Clear region")
                     Button("Skip") { advance() }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.ghost)
                     Button("Next") { advance() }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.primary)
                         .disabled(currentRegionPicks.isEmpty)
                 }
             } else {
                 Text("All regions painted.")
-                    .font(.headline)
+                    .font(Type.body.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
                 Text("Tap Save to apply, or use Reset all to start over.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .font(Type.callout)
+                    .foregroundStyle(Theme.inkDim)
                     .multilineTextAlignment(.center)
                 Button("Save & finish") { saveAndDismiss() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.primary)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial)
+        .background(Theme.surfaceRaised)
     }
 
     private func countLine(for region: FacialRegion) -> String {
@@ -249,13 +272,18 @@ struct RegionCalibrationScreen: View {
         picked[region] = []
     }
 
+    /// Clears the in-session picks only. The persistent store is cleared on Save
+    /// (`pendingStoreClear`) so backing out without saving changes nothing.
     private func resetAll() {
         picked.removeAll()
         stepIndex = 0
-        RegionCalibrationStore.shared.clear()
+        pendingStoreClear = true
     }
 
     private func saveAndDismiss() {
+        if pendingStoreClear {
+            RegionCalibrationStore.shared.clear()
+        }
         // Send empty arrays through merge so they clear that region back to default.
         RegionCalibrationStore.shared.merge(picked)
         onCommitted?()

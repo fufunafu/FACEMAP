@@ -51,7 +51,7 @@ struct BrandMark: View {
         switch size {
         case .large:  return Type.caption
         case .medium: return Type.caption
-        case .small:  return .system(size: 9)
+        case .small:  return Type.micro
         }
     }
 

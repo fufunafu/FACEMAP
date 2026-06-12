@@ -26,6 +26,18 @@ enum Type {
     // MARK: Small caps section header (tracked SF)
 
     static let sectionHeader = Font.system(size: 11, weight: .semibold)
+
+    // MARK: Micro labels & controls
+
+    /// Smallest tracked label — wheel sector names, tiny captions.
+    /// Apply `.tracking(1.0)` at the call site where letterspacing is wanted.
+    static let micro      = Font.system(size: 9,  weight: .semibold)
+    /// Small chip/badge label (domain badges, icon glyphs).
+    static let labelSmall = Font.system(size: 10, weight: .semibold)
+    /// Primary/ghost button label.
+    static let button     = Font.system(size: 16, weight: .medium)
+    /// Compact control text — toolbar glyphs, viewer-control buttons.
+    static let control    = Font.system(size: 14, weight: .semibold)
 }
 
 // MARK: - View helpers

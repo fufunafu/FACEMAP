@@ -1,31 +1,34 @@
 import SwiftUI
 
-/// Compact four-quadrant glyph summarising the Aesthetic Wheel at a glance.
-/// Each quadrant takes the worst severity of its domain's metrics and tints in the
-/// domain hue. Empty domains render as the hairline grey so the glyph is honest about
-/// coverage. Used in the analysis-screen header where the full `AestheticWheel` would
-/// look empty (only one domain populated in v0.2).
+/// Compact five-sector glyph summarising the Aesthetic Wheel at a glance — one 72°
+/// sector per FAS facet, clockwise from 12 o'clock in `FaceDomain.allCases` order
+/// (matching `AestheticWheel` and `LogoMark`). Each sector takes the worst severity
+/// of its facet's metrics and tints in the facet hue. Empty facets render as the
+/// hairline grey so the glyph is honest about coverage. Used in the analysis-screen
+/// header where the full `AestheticWheel` would look empty.
 struct WheelGlyph: View {
     let results: [MetricResult]
     var diameter: CGFloat = 28
 
-    /// Four quadrants — TL, TR, BL, BR. Expression shares the SkinQuality slot since
-    /// the wheel illustration only has 4 visual quadrants; 5-sector layout is a follow-up.
-    private static let quadrantOrder: [FaceDomain] = [.skinQuality, .proportions, .symmetry, .facialShape]
+    /// Sectors clockwise from 12 o'clock.
+    private static let sectorOrder: [FaceDomain] = FaceDomain.allCases
 
     var body: some View {
         ZStack {
-            ForEach(Array(Self.quadrantOrder.enumerated()), id: \.offset) { idx, domain in
-                Quadrant(index: idx)
+            ForEach(Array(Self.sectorOrder.enumerated()), id: \.offset) { idx, domain in
+                Sector(index: idx)
                     .fill(fillColor(for: domain))
             }
-            // Hairline cross to separate quadrants.
+            // Hairline spokes to separate the five sectors.
             Path { p in
                 let r = diameter / 2
-                p.move(to: CGPoint(x: r,  y: 0))
-                p.addLine(to: CGPoint(x: r,  y: diameter))
-                p.move(to: CGPoint(x: 0,  y: r))
-                p.addLine(to: CGPoint(x: diameter, y: r))
+                let centre = CGPoint(x: r, y: r)
+                for i in 0..<Self.sectorOrder.count {
+                    let a = (-90.0 + Double(i) * 72.0) * .pi / 180
+                    p.move(to: centre)
+                    p.addLine(to: CGPoint(x: centre.x + r * CGFloat(cos(a)),
+                                          y: centre.y + r * CGFloat(sin(a))))
+                }
             }
             .stroke(Theme.canvas, lineWidth: 1)
 
@@ -58,24 +61,23 @@ struct WheelGlyph: View {
     }
 
     private var accessibilityDescription: String {
-        let summaries = Self.quadrantOrder.map { d -> String in
+        let summaries = Self.sectorOrder.map { d -> String in
             let n = results.filter { $0.domain == d && !$0.isWithinTarget }.count
             return n == 0 ? "\(d.displayName): clear" : "\(d.displayName): \(n) flagged"
         }
         return "Aesthetic wheel summary. " + summaries.joined(separator: ". ")
     }
 
-    /// One of four pie wedges, in the order TL → TR → BL → BR.
-    private struct Quadrant: Shape {
+    /// One of five 72° pie wedges, clockwise from 12 o'clock.
+    private struct Sector: Shape {
         let index: Int
 
         func path(in rect: CGRect) -> Path {
             let r = min(rect.width, rect.height) / 2
             let centre = CGPoint(x: rect.midX, y: rect.midY)
-            // Start angles in standard SwiftUI clockwise convention (0 = right, 90 = down, etc.).
-            let starts: [Double] = [180, 270, 90, 0]   // TL, TR, BL, BR
-            let start = Angle(degrees: starts[index])
-            let end   = Angle(degrees: starts[index] + 90)
+            // Angles in standard SwiftUI clockwise convention (0 = right, 90 = down, etc.).
+            let start = Angle(degrees: -90 + Double(index) * 72)
+            let end   = Angle(degrees: -90 + Double(index + 1) * 72)
             var p = Path()
             p.move(to: centre)
             p.addArc(center: centre, radius: r, startAngle: start, endAngle: end, clockwise: false)

@@ -12,7 +12,7 @@ struct DomainBadge: View {
                 .fill(domain.hue)
                 .frame(width: 6, height: 6)
             Text(short)
-                .font(.system(size: 10, weight: .semibold))
+                .font(Type.labelSmall)
                 .tracking(1.0)
                 .textCase(.uppercase)
                 .foregroundStyle(Theme.inkDim)

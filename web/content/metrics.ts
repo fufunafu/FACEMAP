@@ -1,7 +1,10 @@
 /**
- * Mirrors FaceMap/Analysis/Metrics/*.swift.
- * The five geometric metrics implemented in v0.1 of the iOS app.
- * Each metric supports one of two FAS facets — Proportions or Symmetry.
+ * Mirrors FaceMap/Analysis/Metrics/*.swift (plus the photo-based
+ * SkinQualityAnalyzer in FaceMap/Analysis/Photo/).
+ * The eight metrics implemented in the iOS app: the five v0.1 geometric
+ * metrics (Proportions / Symmetry facets) plus surface displacement
+ * (Facial shape), resting expression asymmetry (Expression), and the
+ * photo-based skin texture index (Skin quality).
  */
 
 import type { FacetId } from "./fas";
@@ -82,5 +85,35 @@ export const metrics: Metric[] = [
       "Jawline",
     ],
     facet: "symmetry",
+  },
+  {
+    id: "structural.surfaceDisplacement",
+    name: "Surface displacement",
+    summary: "Volume deficit (Z-deficit) per laterally-symmetric region, in mm.",
+    description:
+      "For each lateral region pair (midface, tear trough, marionette, prejowl, jawline), compares the mean Z-coordinate — the out-of-face axis — and reports the worst pair difference. A side significantly flatter than its counterpart indicates a volume deficit.",
+    target: "Paired regions within 1.5 mm Z-difference of the contralateral side.",
+    flags: ["Midface", "Tear trough", "Marionette", "Prejowl", "Jawline"],
+    facet: "facialShape",
+  },
+  {
+    id: "expression.restingAsymmetry",
+    name: "Resting expression asymmetry",
+    summary: "Left/right gap in resting muscle activation (unitless ratio).",
+    description:
+      "Compares paired ARKit blendshape coefficients (brow, eye squint, smile, frown, cheek, dimple) captured at neutral expression and reports the worst absolute left−right activation gap (0…1). A persistent gap indicates asymmetric resting tone or habitual unilateral lines.",
+    target: "Worst paired activation gap ≤ 0.15.",
+    flags: ["Brows", "Tear trough", "Midface", "Nasolabial", "Perioral", "Marionette"],
+    facet: "expression",
+  },
+  {
+    id: "skin.textureEvenness",
+    name: "Skin texture & evenness",
+    summary: "Photo-based skin texture index (provisional).",
+    description:
+      "Analyses the clinical photo (not the mesh): a central face crop is reduced to grayscale and scored for high-frequency texture (fine lines, pores, roughness) and low-frequency evenness (pigmentation, shadowing). The reported value is the texture index; a longitudinal indicator, not an absolute score.",
+    target: "Texture index within 0–0.05 (provisional threshold).",
+    flags: ["Forehead", "Midface", "Perioral"],
+    facet: "skinQuality",
   },
 ];

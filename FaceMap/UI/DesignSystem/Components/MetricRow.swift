@@ -32,7 +32,7 @@ struct MetricRow: View {
 
             if trailingChevron {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Type.captionStrong)
                     .foregroundStyle(Theme.inkMuted)
                     .padding(.top, 4)
             }

@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Visual tokens for FaceMap, aligned to Dr Andreas Nikolis's four-domain
-/// Facial Aesthetic framework. Light surfaces, near-black ink, four domain hues.
-/// Severity is expressed as ring intensity within a domain hue (1/2/3),
+/// Visual tokens for FaceMap, aligned to Dr Andreas Nikolis's five-facet
+/// Facial Assessment Scale (FAS). Light surfaces, near-black ink, five facet hues.
+/// Severity is expressed as ring intensity within a facet hue (1/2/3),
 /// not as a separate red/amber/green ramp.
 ///
 /// Note: the 3D mesh viewport keeps a black interior so the rendered face pops —
@@ -25,15 +25,27 @@ enum Theme {
     static let inkDim         = Color.black.opacity(0.62)
     static let inkMuted       = Color.black.opacity(0.40)
 
-    // MARK: Domain hues — one per quadrant of the Aesthetic Wheel
+    // MARK: Facet hues — one per 72° sector of the Aesthetic Wheel
 
-    // Five domain hues — one per facet of Dr Nikolis's framework
-    static let domainSkinQuality = Color(hex: 0x7A8094) // slate (was Optical)
-    static let domainSkinQualityFill = Color(hex: 0x3F4456)
-    static let domainFacialShape = Color(hex: 0xA6B4DD) // periwinkle (was Structural)
-    static let domainProportions = Color(hex: 0x9AB2D6) // soft blue
+    // Five facet hues — one per facet of Dr Nikolis's FAS.
+    // Keep in sync with `facetHues` in web/lib/tokens.ts (web is source of truth).
+    static let domainSkinQuality = Color(hex: 0xC9BBEE) // lavender
+    static let domainFacialShape = Color(hex: 0xA6B4DD) // periwinkle
+    static let domainProportions = Color(hex: 0x7A8094) // slate
+    static let domainProportionsFill = Color(hex: 0x3F4456) // darker slate for fills
     static let domainSymmetry    = Color(hex: 0xE9B5E0) // magenta-pink
-    static let domainExpression  = Color(hex: 0xC9BBEE) // lavender (was Mechanical)
+    static let domainExpression  = Color(hex: 0xF2C9A1) // peach
+
+    // MARK: Status — semantic colours for warning / confirmation states.
+    //
+    // Use these (never facet hues) for any non-facet meaning: facet hues
+    // exclusively encode FAS facets, so borrowing one for a status reads as a
+    // facet reference.
+    static let warning    = Color(hex: 0xB45309)   // amber foreground / icon
+    static let warningBg  = Color(hex: 0xFEF3C7)   // amber banner background
+    static let warningInk = Color(hex: 0x78350F)   // text on warningBg
+    static let positive   = Color(hex: 0x3E7C4F)   // confirmation ("picked", saved)
+    static let negative   = Color(hex: 0x9B3B2E)   // destructive / failure
 
     // MARK: Geometry
 
@@ -56,10 +68,10 @@ extension FaceDomain {
         }
     }
 
-    /// Foreground hue for fill-style backgrounds (SkinQuality's slate is too dark to read on).
+    /// Foreground hue for fill-style backgrounds (Proportions' slate needs the darker variant).
     var fillHue: Color {
         switch self {
-        case .skinQuality: return Theme.domainSkinQualityFill
+        case .proportions: return Theme.domainProportionsFill
         default:           return hue
         }
     }
