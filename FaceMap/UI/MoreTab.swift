@@ -139,22 +139,30 @@ struct CalibrationExplainerScreen: View {
                         .font(Type.displayMedium)
                         .foregroundStyle(Theme.ink)
 
-                    Text("ARKit's face mesh has fixed topology — a given anatomical landmark always maps to the same vertex index across devices. FaceMap ships with reference indices that should be confirmed against your own captures before clinical interpretation.")
+                    Text("ARKit's face mesh has fixed topology — a given anatomical landmark always maps to the same vertex index across devices. FaceMap ships with placeholder indices, so clinical capture stays locked until every landmark has been calibrated once on a real mesh.")
                         .font(Type.body)
                         .foregroundStyle(Theme.inkDim)
 
                     Text("HOW TO RUN").sectionHeaderStyle()
                     VStack(alignment: .leading, spacing: 8) {
-                        labelledStep("1.", "Open a captured case from the Patients tab.")
-                        labelledStep("2.", "Tap the scope icon in the Analysis toolbar.")
-                        labelledStep("3.", "Tap each named landmark on the rendered mesh in turn.")
-                        labelledStep("4.", "Save when finished — calibrated indices override the defaults from then on.")
+                        labelledStep("1.", "Tap \"Start calibration capture\" below and capture one frontal mesh — your own face is fine.")
+                        labelledStep("2.", "Tap each named landmark on the rendered mesh in turn.")
+                        labelledStep("3.", "Save when finished — calibrated indices override the defaults from then on, and clinical capture unlocks.")
                     }
                     .padding(12)
                     .background(Theme.surface)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
 
-                    Text("Calibrated values persist on this device only. They do not affect saved cases, only future analyses.")
+                    NavigationLink {
+                        CalibrationCaptureScreen()
+                    } label: {
+                        Text("Start calibration capture")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.primary)
+                    .padding(.top, 4)
+
+                    Text("Calibrated values persist on this device only. They do not affect saved cases, only future analyses. You can also recalibrate from any saved case via the scope icon in the Analysis toolbar.")
                         .font(Type.caption)
                         .foregroundStyle(Theme.inkMuted)
                         .padding(.top, 4)

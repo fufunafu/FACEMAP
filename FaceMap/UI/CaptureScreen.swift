@@ -60,7 +60,23 @@ struct CaptureScreen: View {
     // TODO: migrate to Theme.warning token
     private let warningAmber = Color(hex: 0xC77D0A)
 
+    // Calibration gate: clinical capture is blocked until every landmark is
+    // calibrated (the shipped indices are placeholders — see FaceLandmarkIndices).
+    // Session-only "evaluation" override is the escape hatch for demos.
+    @ObservedObject private var calibrationStore = LandmarkCalibrationStore.shared
+    @ObservedObject private var gateSession = CalibrationGateSession.shared
+
     var body: some View {
+        if calibrationStore.isFullyCalibrated || gateSession.evaluationOverrideGranted {
+            captureBody
+        } else {
+            CalibrationGateView()
+                .navigationTitle("Capture")
+                .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var captureBody: some View {
         ZStack {
             Theme.canvas.ignoresSafeArea()
 

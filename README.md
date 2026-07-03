@@ -37,7 +37,7 @@ See `/Users/fuannegao/.claude/plans/i-want-to-create-snappy-treasure.md` for the
 - `Analysis/` — `FaceMetric` protocol, `AnalyzableFace` with named landmark accessors, `MetricRegistry`, four metrics (thirds, fifths, golden ratio, canthal tilt)
 - `Visualization/` — RealityKit mesh overlay + per-region heatmap
 - `Cases/` — SwiftData persistence
-- `Cloud/` — sync stubs (Phase 2)
+- `Cloud/` — sync stubs (Phase 5)
 - `UI/` — SwiftUI screens
 
 ## Calibrating landmark indices
@@ -49,7 +49,7 @@ ARKit's face mesh has stable topology (~1,220 vertices, fixed indices across all
 - **v0.1** (this build): geometric ratios → flagged regions
 - **v0.2**: midsagittal asymmetry detection
 - **v0.3**: volumetric / contour comparison against template or contralateral side
-- **Phase 2**: optional cloud sync (Vercel + Neon Postgres + Vercel Blob, Sign in with Apple)
+- **Phase 5**: optional cloud sync (Vercel + Neon Postgres + Vercel Blob, Sign in with Apple)
 
 ## ⚠️ Pre-production checklist
 
@@ -69,9 +69,9 @@ These shortcuts are acceptable while we have no real users and no clinical data 
 
 **Why no dev-mode store reset any more:** earlier versions caught migration failures and wiped the on-device store. That convenience would silently destroy patient cases in production. `FaceMapApp.init()` now lets migration failures crash so they're caught in TestFlight before they reach a practitioner.
 
-### 2. Calibrate landmark indices before clinical use
+### 2. Calibrate landmark indices before clinical use — ✅ gated as of v0.8.0
 
-`FaceMap/Analysis/Landmarks/FaceLandmarkIndices.swift` ships placeholder vertex indices. Until a practitioner runs the in-app calibration screen against their own captured mesh, metric outputs are not clinically meaningful. The disclaimer copy reflects this — **do not remove the disclaimer language until calibration is mandatory at first launch.**
+`FaceMap/Analysis/Landmarks/FaceLandmarkIndices.swift` ships placeholder vertex indices, so metric outputs are not clinically meaningful until calibrated. **As of v0.8.0 clinical capture is blocked until every landmark is calibrated**: both capture entry points render `CalibrationGateView` instead of the camera, with a dedicated calibration-capture flow (`CalibrationCaptureScreen`) that never creates a patient case. A "Continue uncalibrated (evaluation only)" override exists for demos but is **session-scoped and never persisted** — it resets on every launch, and all calibration warning banners and PDF strips remain regardless. Keep the disclaimer language as-is; it still covers the evaluation-override path.
 
 ### 3. Storage hygiene
 

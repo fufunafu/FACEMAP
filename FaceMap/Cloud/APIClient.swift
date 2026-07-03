@@ -1,6 +1,6 @@
 import Foundation
 
-/// Phase 2 backend client. Stub for v0.1 — exists so wiring the real client later doesn't
+/// Phase 5 backend client. Stub for v0.1 — exists so wiring the real client later doesn't
 /// require restructuring call sites.
 struct APIClient {
     let baseURL: URL

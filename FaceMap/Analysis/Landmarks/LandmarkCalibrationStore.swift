@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import os
 
@@ -12,7 +13,10 @@ import os
 /// compatibility and upgraded to the envelope on the next `save(_:)`. Indices are validated
 /// to `0..<FaceLandmarkIndices.arkitVertexCount` on both read and write — invalid entries
 /// are dropped (and logged) rather than allowed to crash mesh code downstream.
-final class LandmarkCalibrationStore {
+///
+/// `ObservableObject`: `save`/`clear` publish so the capture calibration gate lifts
+/// live from whichever calibration path completed (`merge` funnels through `save`).
+final class LandmarkCalibrationStore: ObservableObject {
     static let shared = LandmarkCalibrationStore()
 
     private static let logger = Logger(subsystem: "com.fuanne.facemap",
@@ -83,6 +87,7 @@ final class LandmarkCalibrationStore {
     /// Replace the entire calibration with the given map. Use `merge(_:)` to update incrementally.
     /// Out-of-range indices are dropped (and logged), never persisted.
     func save(_ indices: [AnatomicalLandmark: Int]) {
+        objectWillChange.send()
         var entries: [String: Int] = [:]
         for (k, v) in indices {
             guard (0..<FaceLandmarkIndices.arkitVertexCount).contains(v) else {
@@ -115,6 +120,7 @@ final class LandmarkCalibrationStore {
     }
 
     func clear() {
+        objectWillChange.send()
         defaults.removeObject(forKey: key)
         cachedEffective = nil
     }
