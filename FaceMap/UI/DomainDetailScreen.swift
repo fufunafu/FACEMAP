@@ -11,6 +11,8 @@ struct DomainDetailScreen: View {
     /// Region severities pre-computed by the parent screen (already merged across metrics).
     let regionSeverity: [FacialRegion: MetricResult.Severity]
     let regionDomain: [FacialRegion: FaceDomain]
+    /// Clinical photo for the active pose — enables the photo-textured surface.
+    var photoJPEG: Data? = nil
     /// Same formatter `AnalysisScreen` uses, threaded through so display strings stay consistent.
     let valueFormatter: (MetricResult) -> String
 
@@ -87,6 +89,7 @@ struct DomainDetailScreen: View {
                 face: face,
                 regionSeverity: domainRegionSeverity,
                 regionDomain: regionDomain,
+                photoJPEG: photoJPEG,
                 constructions: domainConstructions
             )
         }
@@ -102,6 +105,7 @@ struct DomainDetailScreen: View {
                     regionSeverity: domainRegionSeverity,
                     regionDomain: regionDomain,
                     controller: meshController,
+                    photoJPEG: photoJPEG,
                     interactive: false,
                     backgroundColor: UIColor(Theme.surfaceRaised),
                     constructions: domainConstructions

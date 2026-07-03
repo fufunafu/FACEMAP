@@ -154,15 +154,18 @@ struct ComparisonScreen: View {
     private var meshRow: some View {
         HStack(spacing: 12) {
             meshColumn(face: visitA.capturedFace, label: visitA.label,
-                       date: visitA.createdAt, controller: meshA, results: resultsA, side: "A")
+                       date: visitA.createdAt, controller: meshA, results: resultsA,
+                       photoJPEG: visitA.frontalPhotoJPEG, side: "A")
             meshColumn(face: visitB.capturedFace, label: visitB.label,
-                       date: visitB.createdAt, controller: meshB, results: resultsB, side: "B")
+                       date: visitB.createdAt, controller: meshB, results: resultsB,
+                       photoJPEG: visitB.frontalPhotoJPEG, side: "B")
         }
     }
 
     private func meshColumn(face: CapturedFace?, label: String, date: Date,
                             controller: FaceMeshController,
-                            results: [MetricResult], side: String) -> some View {
+                            results: [MetricResult],
+                            photoJPEG: Data?, side: String) -> some View {
         let regSeverity = results.flaggedRegionsBySeverity
         let regDomain   = results.regionDomainsByWorstSeverity
         return VStack(alignment: .leading, spacing: 8) {
@@ -178,7 +181,8 @@ struct ComparisonScreen: View {
                     face: face,
                     regionSeverity: regSeverity,
                     regionDomain: regDomain,
-                    controller: controller
+                    controller: controller,
+                    photoJPEG: photoJPEG
                 )
                 .frame(height: 200)
                 .background(Theme.surface)
@@ -465,8 +469,8 @@ struct ComparisonScreen: View {
             defer { isExporting = false }
             await Task.yield()   // let the progress overlay paint first
 
-            let snapA = renderMeshSnapshot(for: visitA, results: resultsA)
-            let snapB = renderMeshSnapshot(for: visitB, results: resultsB)
+            let snapA = await renderMeshSnapshot(for: visitA, results: resultsA)
+            let snapB = await renderMeshSnapshot(for: visitB, results: resultsB)
             guard let data = ComparisonReportPDF.generate(
                 patient: patient,
                 visitA: visitA,
@@ -495,17 +499,13 @@ struct ComparisonScreen: View {
 
     @MainActor
     private func renderMeshSnapshot(for visit: PatientCase,
-                                    results: [MetricResult]) -> UIImage? {
+                                    results: [MetricResult]) async -> UIImage? {
         guard let face = visit.capturedFace else { return nil }
-        let view = FaceMeshOverlay(
+        return await MeshSnapshotRenderer.render(
             face: face,
+            photoJPEG: visit.frontalPhotoJPEG,
             regionSeverity: results.flaggedRegionsBySeverity,
-            regionDomain: results.regionDomainsByWorstSeverity,
-            controller: FaceMeshController()
+            regionDomain: results.regionDomainsByWorstSeverity
         )
-        .frame(width: 600, height: 400)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        return renderer.uiImage
     }
 }

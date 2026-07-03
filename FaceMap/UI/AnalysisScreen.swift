@@ -132,6 +132,7 @@ struct AnalysisScreen: View {
                         results: results,
                         regionSeverity: regionSeverity,
                         regionDomain: regionDomain,
+                        photoJPEG: multiPose.photo(for: activePose),
                         onOpenFullscreen: { showingFullscreenMesh = true }
                     )
                     .padding(.horizontal, 16)
@@ -149,6 +150,13 @@ struct AnalysisScreen: View {
 
                     if multiPose.availablePoses.count > 1 {
                         posePicker
+                            .padding(.horizontal, 16)
+                    }
+
+                    // Hidden for legacy captures (quality == nil) — no scare label
+                    // for records that simply predate quality scoring.
+                    if let quality = face.quality {
+                        captureQualityRow(quality)
                             .padding(.horizontal, 16)
                     }
 
@@ -172,7 +180,8 @@ struct AnalysisScreen: View {
             MeshFullScreen(
                 face: face,
                 regionSeverity: regionSeverity,
-                regionDomain: regionDomain
+                regionDomain: regionDomain,
+                photoJPEG: multiPose.photo(for: activePose)
             )
         }
         .sheet(isPresented: $showingNotes) { notesSheet }
@@ -253,6 +262,55 @@ struct AnalysisScreen: View {
         }
     }
 
+    // MARK: - Capture quality (badge + low-quality warning; never blocks save)
+
+    // TODO: migrate to Theme.warning token
+    private let qualityWarningAmber = Color(hex: 0xC77D0A)
+
+    private func qualityColor(_ band: CaptureQuality.Band) -> Color {
+        switch band {
+        case .good: return Theme.ink
+        case .fair: return Theme.inkDim
+        case .poor: return qualityWarningAmber
+        }
+    }
+
+    /// Quality badge for the active pose. Low quality warns but never blocks save —
+    /// the practitioner decides whether a capture is usable.
+    ///
+    /// Future hooks (deliberately out of v1):
+    /// - multiply `MetricResult.confidence` by `quality.composite`
+    /// - derive `SurfaceChangeAnalyzer`'s noise floor from the two visits' jitter
+    ///   (`max(0.3 mm, k * meanJitterMM)`) instead of the fixed 0.3 mm.
+    @ViewBuilder
+    private func captureQualityRow(_ quality: CaptureQuality) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Circle().fill(qualityColor(quality.band)).frame(width: 8, height: 8)
+                Text("Capture quality: \(quality.band.label)")
+                    .font(Type.captionStrong)
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+            }
+            if quality.band == .poor {
+                Text("Capture quality is low — head pose or movement during capture. Consider retaking this pose.")
+                    .font(Type.caption)
+                    .foregroundStyle(Theme.inkDim)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(quality.band == .poor ? qualityWarningAmber.opacity(0.5) : Theme.hairline,
+                        lineWidth: 1)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Capture quality \(quality.band.label)")
+    }
+
     // MARK: - Pose picker (shown when this case has more than one pose)
 
     private var posePicker: some View {
@@ -300,6 +358,7 @@ struct AnalysisScreen: View {
                                 allResults: results,
                                 regionSeverity: regionSeverity,
                                 regionDomain: regionDomain,
+                                photoJPEG: multiPose.photo(for: activePose),
                                 valueFormatter: formatValue
                             )
                         } label: {
@@ -806,11 +865,15 @@ struct AnalysisScreen: View {
             return
         }
         isExportingPDF = true
-        // Defer one runloop turn so the progress overlay has a chance to render
-        // before the (synchronous) renderer work starts.
-        DispatchQueue.main.async {
+        Task { @MainActor in
             defer { isExportingPDF = false }
-            let snapshot = renderMeshSnapshot()
+            await Task.yield()   // let the progress overlay paint first
+            let snapshot = await MeshSnapshotRenderer.render(
+                face: face,
+                photoJPEG: multiPose.photo(for: activePose),
+                regionSeverity: regionSeverity,
+                regionDomain: regionDomain
+            )
             guard let data = TreatmentPlanPDF.generate(
                 patient: p, visit: c, meshSnapshot: snapshot
             ) else {
@@ -825,19 +888,6 @@ struct AnalysisScreen: View {
             }
             pdfShareItem = item
         }
-    }
-
-    private func renderMeshSnapshot() -> UIImage? {
-        let view = FaceMeshOverlay(
-            face: face,
-            regionSeverity: regionSeverity,
-            regionDomain: regionDomain,
-            controller: FaceMeshController()
-        )
-        .frame(width: 600, height: 400)
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        return renderer.uiImage
     }
 
     // MARK: - Value formatting

@@ -19,6 +19,10 @@ struct CaptureScreen: View {
     @State private var captureRequested = false
     @State private var trackingState: FaceCaptureView.Coordinator.TrackingState = .noFace
     @State private var headPose: HeadPose?
+    /// Capture-gate violations for the current frame (pose window, level-ness,
+    /// neutral expression). Auto-capture requires this to stay empty for the full
+    /// hold duration; the first entry drives the coaching copy.
+    @State private var gateViolations: [CaptureGate.Violation] = []
     @State private var isCapturing = false
     /// True while a snapshot triggered by the auto hold-to-capture path is in flight,
     /// so the result can be re-verified against the yaw window when it lands.
@@ -41,8 +45,8 @@ struct CaptureScreen: View {
     private let poseOrder: [CapturePose] = [.frontal, .obliqueL, .obliqueR]
 
     private var isPoseInWindow: Bool {
-        guard let pose = headPose, trackingState == .tracking else { return false }
-        return currentPose.contains(yawDegrees: pose.yawDegrees)
+        guard headPose != nil, trackingState == .tracking else { return false }
+        return gateViolations.isEmpty
     }
 
     /// States where the camera feed is unusable and the user needs an explanation.
@@ -64,7 +68,8 @@ struct CaptureScreen: View {
                 FaceCaptureView(
                     onSnapshot: handleSnapshot,
                     onTrackingState: handleTrackingState,
-                    onHeadPose: handleHeadPose,
+                    onFrameState: handleFrameState,
+                    targetPose: currentPose,
                     captureRequested: $captureRequested
                 )
                 .ignoresSafeArea()
@@ -132,11 +137,14 @@ struct CaptureScreen: View {
         poseInWindowSince = nil
 
         if wasAuto {
-            // Re-verify the yaw window at snapshot time — the head may have left the
-            // window between the trigger and the (frame-buffered) snapshot landing.
-            guard let pose = headPose, currentPose.contains(yawDegrees: pose.yawDegrees) else {
-                return
-            }
+            // Re-verify at snapshot time — the head may have left the window (or the
+            // expression changed) between the trigger and the frame-buffered snapshot
+            // landing. The snapshot's own recorded gate state is race-free; the yaw
+            // re-check is the fallback for captures without a quality record.
+            let stillClean = face.quality.map { $0.gateViolations.isEmpty }
+                ?? headPose.map { currentPose.contains(yawDegrees: $0.yawDegrees) }
+                ?? false
+            guard stillClean else { return }
         }
 
         captures[currentPose] = face
@@ -186,15 +194,19 @@ struct CaptureScreen: View {
         trackingState = state
         if state != .tracking {
             headPose = nil
+            gateViolations = []
             poseInWindowSince = nil
             isCapturing = false
             autoCaptureInFlight = false
         }
     }
 
-    private func handleHeadPose(_ pose: HeadPose) {
+    private func handleFrameState(_ pose: HeadPose, _ violations: [CaptureGate.Violation]) {
         headPose = pose
-        if currentPose.contains(yawDegrees: pose.yawDegrees) {
+        gateViolations = violations
+        if violations.isEmpty {
+            // Any violation resets the hold timer, so a gate must pass continuously
+            // for the full hold — this debounces blendshape flicker for free.
             if poseInWindowSince == nil { poseInWindowSince = Date() }
             if !isCapturing, let since = poseInWindowSince,
                Date().timeIntervalSince(since) >= holdDuration {
@@ -309,13 +321,17 @@ struct CaptureScreen: View {
         case .noFace:           return "Position your face in front of the camera"
         case .tracking:
             if isPoseInWindow { return "Hold — capturing…" }
-            if let pose = headPose {
-                let signed = currentPose.yawError(currentDegrees: pose.yawDegrees)
-                if abs(signed) > currentPose.yawToleranceDegrees {
+            switch gateViolations.first {
+            case .yawOutOfWindow:
+                if let pose = headPose {
                     return String(format: "Yaw %+.0f°", pose.yawDegrees)
                 }
+                return CaptureGate.Violation.yawOutOfWindow.coachingText
+            case .some(let violation):
+                return violation.coachingText
+            case .none:
+                return "Face detected"
             }
-            return "Face detected"
         }
     }
 
@@ -434,7 +450,16 @@ struct CaptureScreen: View {
         case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
             return ""
         case .noFace:   return "Position your face in the frame"
-        case .tracking: return isPoseInWindow ? "Hold still…" : currentPose.coachPrompt
+        case .tracking:
+            if isPoseInWindow { return "Hold still…" }
+            // Only prompt a head turn when yaw is actually the problem; a level-ness
+            // or expression violation with correct yaw should not tell the patient
+            // to keep turning.
+            switch gateViolations.first {
+            case .yawOutOfWindow, .none: return currentPose.coachPrompt
+            case .pitchTilted, .rollTilted: return "Keep the head level"
+            case .jawOpen, .smiling, .browRaised, .eyesClosed: return "Neutral expression"
+            }
         }
     }
 
@@ -447,16 +472,21 @@ struct CaptureScreen: View {
             if isPoseInWindow {
                 return "Capturing in under a second."
             }
-            if let pose = headPose {
-                let err = currentPose.yawError(currentDegrees: pose.yawDegrees)
-                let direction = err > 0 ? "right" : "left"
-                if abs(err) > currentPose.yawToleranceDegrees * 2 {
-                    return String(format: "Target %.0f° · turn slowly to your %@",
-                                  currentPose.targetYawDegrees, direction)
+            switch gateViolations.first {
+            case .yawOutOfWindow, .none:
+                if let pose = headPose {
+                    let err = currentPose.yawError(currentDegrees: pose.yawDegrees)
+                    let direction = err > 0 ? "right" : "left"
+                    if abs(err) > currentPose.yawToleranceDegrees * 2 {
+                        return String(format: "Target %.0f° · turn slowly to your %@",
+                                      currentPose.targetYawDegrees, direction)
+                    }
+                    return String(format: "Almost there — %+.0f°", err)
                 }
-                return String(format: "Almost there — %+.0f°", err)
+                return "Target yaw \(Int(currentPose.targetYawDegrees))°"
+            case .some(let violation):
+                return violation.coachingText
             }
-            return "Target yaw \(Int(currentPose.targetYawDegrees))°"
         }
     }
 

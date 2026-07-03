@@ -10,27 +10,32 @@ import UIKit
 struct FaceCaptureView: UIViewRepresentable {
     final class Coordinator: NSObject, ARSessionDelegate {
         weak var arView: ARView?
-        /// Snapshot callback: the averaged mesh plus a portrait-oriented JPEG of the
+        /// Snapshot callback: the aggregated mesh plus a portrait-oriented JPEG of the
         /// camera frame at capture time (nil if the frame couldn't be encoded).
         let onSnapshot: (CapturedFace, Data?) -> Void
         let onTrackingState: (TrackingState) -> Void
-        let onHeadPose: (HeadPose) -> Void
+        /// Per-frame head pose + active capture-gate violations (empty = ready).
+        let onFrameState: (HeadPose, [CaptureGate.Violation]) -> Void
 
         private static let ciContext = CIContext()
 
-        /// Buffer of recent geometries used for frame averaging on capture.
-        private var recentGeometries: [(vertices: [SIMD3<Float>], transform: simd_float4x4, blendShapes: [String: Float])] = []
+        /// Buffer of recent geometries used for frame aggregation on capture.
+        private var recentGeometries: [(vertices: [SIMD3<Float>], transform: simd_float4x4,
+                                        blendShapes: [String: Float], headPose: HeadPose)] = []
         private let bufferSize = 10
         private var triangleIndices: [Int16] = []
         /// Set true by `updateUIView` when a capture is requested; honored on the next frame.
         var pendingSnapshot = false
+        /// The pose the coached flow is currently capturing — drives gate evaluation
+        /// and the quality score's yaw-error term. Mirrored from SwiftUI by `updateUIView`.
+        var targetPose: CapturePose = .frontal
 
         init(onSnapshot: @escaping (CapturedFace, Data?) -> Void,
              onTrackingState: @escaping (TrackingState) -> Void,
-             onHeadPose: @escaping (HeadPose) -> Void) {
+             onFrameState: @escaping (HeadPose, [CaptureGate.Violation]) -> Void) {
             self.onSnapshot = onSnapshot
             self.onTrackingState = onTrackingState
-            self.onHeadPose = onHeadPose
+            self.onFrameState = onFrameState
         }
 
         enum TrackingState: Equatable {
@@ -51,21 +56,24 @@ struct FaceCaptureView: UIViewRepresentable {
                 return
             }
             onTrackingState(.tracking)
-            onHeadPose(HeadPose.from(transform: face.transform))
+            let headPose = HeadPose.from(transform: face.transform)
+            let blendDict: [String: Float] = Dictionary(
+                uniqueKeysWithValues: face.blendShapes.map { ($0.key.rawValue, $0.value.floatValue) }
+            )
+            onFrameState(headPose, CaptureGate.evaluate(targetPose: targetPose,
+                                                        pose: headPose,
+                                                        blendShapes: blendDict))
             let geom = face.geometry
             if triangleIndices.isEmpty {
                 triangleIndices = geom.triangleIndices.map { Int16($0) }
             }
-            let blendDict: [String: Float] = Dictionary(
-                uniqueKeysWithValues: face.blendShapes.map { ($0.key.rawValue, $0.value.floatValue) }
-            )
-            recentGeometries.append((geom.vertices, face.transform, blendDict))
+            recentGeometries.append((geom.vertices, face.transform, blendDict, headPose))
             if recentGeometries.count > bufferSize { recentGeometries.removeFirst() }
 
             if pendingSnapshot, recentGeometries.count >= bufferSize {
                 // Keep the request alive if this frame couldn't produce a snapshot
                 // (e.g. mixed-topology buffer) so a later frame can retry.
-                if captureSnapshot() { pendingSnapshot = false }
+                if captureSnapshot(frame: frame, faceAnchor: face) { pendingSnapshot = false }
             }
         }
 
@@ -97,45 +105,83 @@ struct FaceCaptureView: UIViewRepresentable {
             pendingSnapshot = false
         }
 
-        /// Average the buffered frames into a single CapturedFace and emit it.
+        /// Aggregate the buffered frames into a single CapturedFace and emit it,
+        /// together with a JPEG of the trigger frame. Everything photo-related
+        /// (pixels, intrinsics, camera transform, face transform) comes from the ONE
+        /// `frame`/`faceAnchor` pair passed in — the frame that triggered the
+        /// snapshot — so the texture-projection data is self-consistent. (The old
+        /// implementation pulled the JPEG from `session.currentFrame`, which could
+        /// already be a different frame.)
         /// Returns false when no valid snapshot could be produced.
         @discardableResult
-        func captureSnapshot() -> Bool {
+        func captureSnapshot(frame: ARFrame, faceAnchor: ARFaceAnchor) -> Bool {
             guard !triangleIndices.isEmpty,
                   let reference = recentGeometries.last?.vertices.count,
                   reference > 0 else { return false }
-            // Only average samples that share the latest frame's topology — a mid-buffer
-            // vertex-count change would otherwise corrupt (or crash) the average.
+            // Only aggregate samples that share the latest frame's topology — a mid-buffer
+            // vertex-count change would otherwise corrupt (or crash) the result.
             let samples = recentGeometries.filter { $0.vertices.count == reference }
             guard !samples.isEmpty else { return false }
 
-            let count = samples.count
-            let n = reference
-            var avg = Array(repeating: SIMD3<Float>(repeating: 0), count: n)
-            for sample in samples {
-                for i in 0..<n { avg[i] += sample.vertices[i] }
-            }
-            let scale = Float(1) / Float(count)
-            for i in 0..<n { avg[i] *= scale }
+            let vertexSamples = samples.map { $0.vertices }
+            let aggregated = FrameAggregator.robustAverage(vertexSamples)
+            let (meanJitterMM, maxJitterMM) = FrameAggregator.jitterStats(vertexSamples)
+            // Transform + blendshapes must stay a coherent single-frame snapshot;
+            // take them from the medoid — the buffered frame closest to the
+            // aggregated mesh — rather than blindly from the last frame.
+            let medoid = samples[FrameAggregator.medoidIndex(of: vertexSamples, against: aggregated)]
 
-            let last = samples.last!
-            let face = CapturedFace(
-                vertices: avg,
-                triangleIndices: triangleIndices,
-                transform: last.transform,
-                blendShapes: last.blendShapes,
-                timestamp: Date()
+            // Photo-frame state for texture projection and the quality score.
+            let photoHeadPose = HeadPose.from(transform: faceAnchor.transform)
+            let blendDict: [String: Float] = Dictionary(
+                uniqueKeysWithValues: faceAnchor.blendShapes.map { ($0.key.rawValue, $0.value.floatValue) }
             )
-            onSnapshot(face, currentFramePhotoJPEG())
+            let violations = CaptureGate.evaluate(targetPose: targetPose,
+                                                  pose: photoHeadPose,
+                                                  blendShapes: blendDict)
+            let quality = CaptureQuality.compute(
+                framesAveraged: samples.count,
+                meanJitterMM: meanJitterMM,
+                maxJitterMM: maxJitterMM,
+                yawErrorDegrees: Float(targetPose.yawError(currentDegrees: photoHeadPose.yawDegrees)),
+                pitchDegrees: Float(photoHeadPose.pitchDegrees),
+                rollDegrees: Float(photoHeadPose.rollDegrees),
+                expressionMax: CaptureGate.expressionRatio(blendShapes: blendDict),
+                gateViolations: violations.map(\.rawValue)
+            )
+
+            // Canonical UVs are read per capture (not cached like triangleIndices):
+            // ~10 KB once per snapshot, and a per-capture read stays trivially correct
+            // if the topology ever changes between sessions.
+            let uvs = faceAnchor.geometry.textureCoordinates.map { SIMD2(Float($0.x), Float($0.y)) }
+            let resolution = frame.camera.imageResolution
+
+            let face = CapturedFace(
+                vertices: aggregated,
+                triangleIndices: triangleIndices,
+                transform: medoid.transform,
+                blendShapes: medoid.blendShapes,
+                timestamp: Date(),
+                textureCoordinates: uvs,
+                cameraIntrinsics: frame.camera.intrinsics,
+                cameraImageResolution: SIMD2(Float(resolution.width), Float(resolution.height)),
+                cameraTransform: frame.camera.transform,
+                photoFaceTransform: faceAnchor.transform,
+                quality: quality
+            )
+            onSnapshot(face, photoJPEG(from: frame))
             return true
         }
 
-        /// JPEG of the camera frame at capture time, rotated to portrait. The raw
-        /// sensor image is unmirrored, which matches clinical-photography convention
-        /// (the patient as others see them) — do not mirror it to match the preview.
-        private func currentFramePhotoJPEG() -> Data? {
-            guard let pixelBuffer = arView?.session.currentFrame?.capturedImage else { return nil }
-            let ci = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
+        /// JPEG of the trigger frame, rotated to portrait. The raw sensor image is
+        /// unmirrored, which matches clinical-photography convention (the patient as
+        /// others see them) — do not mirror it to match the preview.
+        /// Resolution is deliberately left at the AR video format's native size: the
+        /// face spans only a few hundred pixels of the frame and the photo doubles as
+        /// the mesh texture. (Future option: pick the largest
+        /// `ARFaceTrackingConfiguration.supportedVideoFormats` entry for more texels.)
+        private func photoJPEG(from frame: ARFrame) -> Data? {
+            let ci = CIImage(cvPixelBuffer: frame.capturedImage).oriented(.right)
             guard let cg = Self.ciContext.createCGImage(ci, from: ci.extent) else { return nil }
             return UIImage(cgImage: cg).jpegData(compressionQuality: 0.85)
         }
@@ -143,14 +189,16 @@ struct FaceCaptureView: UIViewRepresentable {
 
     let onSnapshot: (CapturedFace, Data?) -> Void
     let onTrackingState: (Coordinator.TrackingState) -> Void
-    var onHeadPose: (HeadPose) -> Void = { _ in }
+    var onFrameState: (HeadPose, [CaptureGate.Violation]) -> Void = { _, _ in }
+    /// The pose the coached flow is currently capturing (gates + quality scoring).
+    var targetPose: CapturePose = .frontal
     @Binding var captureRequested: Bool
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
             onSnapshot: onSnapshot,
             onTrackingState: onTrackingState,
-            onHeadPose: onHeadPose
+            onFrameState: onFrameState
         )
     }
 
@@ -199,6 +247,7 @@ struct FaceCaptureView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: ARView, context: Context) {
+        context.coordinator.targetPose = targetPose
         if captureRequested {
             context.coordinator.pendingSnapshot = true
             DispatchQueue.main.async { captureRequested = false }

@@ -116,28 +116,28 @@ struct CalibrationMeshView: UIViewRepresentable {
     private func rebuild(into view: ARView, coordinator: Coordinator) {
         view.scene.anchors.removeAll()
 
-        guard let (entity, centeredVerts, c) = buildMesh() else { return }
-        coordinator.entity = entity
+        // Calibration deliberately stays on the clay surface (no photo, no heatmap):
+        // vertex picking needs unobstructed geometry, and collision shapes for taps.
+        let style = FaceMeshStyle(surface: .clay, heatmap: nil,
+                                  castsShadows: true, generateCollision: true)
+        guard let result = FaceMeshBuilder.build(face: face, photoJPEG: nil,
+                                                 style: style, cacheKey: nil) else { return }
+        coordinator.entity = result.entity
         coordinator.faceVertices = face.vertices
-        coordinator.centroid = c
+        coordinator.centroid = result.centroid
 
         let anchor = AnchorEntity(world: [0, 0, -0.4])
-        anchor.addChild(entity)
+        anchor.addChild(result.entity)
         view.scene.addAnchor(anchor)
 
-        let light = DirectionalLight()
-        light.light.color = .white
-        light.light.intensity = 1500
-        light.orientation = simd_quatf(angle: -.pi / 6, axis: [1, 0, 0])
-        anchor.addChild(light)
+        FaceMeshLighting.apply(to: view, anchor: anchor, castsShadows: true)
 
-        controller.attach(entity)
+        controller.attach(result)
 
         // Marker container — child of the entity so it inherits rotation/scale.
         let markerAnchor = AnchorEntity()
-        entity.addChild(markerAnchor)
+        result.entity.addChild(markerAnchor)
         coordinator.markerAnchor = markerAnchor
-        _ = centeredVerts                      // capture not needed; vertices live on coordinator
         rebuildMarkers(in: view, coordinator: coordinator)
     }
 
@@ -209,30 +209,4 @@ struct CalibrationMeshView: UIViewRepresentable {
         return entity
     }
 
-    /// Returns the model entity, the centered vertex array used for picking, and the centroid.
-    private func buildMesh() -> (ModelEntity, [SIMD3<Float>], SIMD3<Float>)? {
-        let raw = face.vertices
-        guard !raw.isEmpty, !face.triangleIndices.isEmpty else { return nil }
-
-        let centroid = raw.reduce(SIMD3<Float>(repeating: 0), +) / Float(raw.count)
-        let centered = raw.map { $0 - centroid }
-
-        var d = MeshDescriptor(name: "calibrationFace")
-        d.positions = MeshBuffers.Positions(centered)
-        d.primitives = .triangles(face.triangleIndices.map { UInt32($0) })
-        d.materials = .allFaces(0)
-
-        // intentionally silent: visual-only fallback — a failed mesh build just shows
-        // an empty viewport; indices were validated at decode time in CapturedFace.
-        guard let resource = try? MeshResource.generate(from: [d]) else { return nil }
-
-        var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(tint: UIColor(white: 0.78, alpha: 1))
-        material.roughness = 0.7
-        material.metallic = 0.0
-
-        let entity = ModelEntity(mesh: resource, materials: [material])
-        entity.generateCollisionShapes(recursive: false)
-        return (entity, centered, centroid)
-    }
 }

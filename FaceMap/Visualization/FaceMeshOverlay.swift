@@ -9,6 +9,9 @@ import simd
 /// directly to the entity, so SwiftUI does not re-render the whole overlay on each frame.
 final class FaceMeshController: ObservableObject {
     internal weak var entity: ModelEntity?
+    /// Build product for the attached mesh — carries the surface/heatmap toggles
+    /// used by the full-screen viewer's controls.
+    internal private(set) var buildResult: FaceMeshBuildResult?
 
     private var yaw: Float = 0
     private var pitch: Float = 0
@@ -20,6 +23,23 @@ final class FaceMeshController: ObservableObject {
         self.entity = entity
         applyTransform()
     }
+
+    internal func attach(_ result: FaceMeshBuildResult) {
+        buildResult = result
+        attach(result.entity)
+    }
+
+    /// Photo ↔ clay surface toggle (no-op until the photo texture bake lands).
+    func setSurface(_ surface: FaceMeshStyle.Surface) {
+        buildResult?.setSurface(surface)
+    }
+
+    func setHeatmapVisible(_ visible: Bool) {
+        buildResult?.setHeatmapVisible(visible)
+    }
+
+    /// Whether a photo-textured surface is (or will become) available.
+    var hasPhotoSurface: Bool { buildResult?.hasPhotoSurface ?? false }
 
     func reset() {
         yaw = 0; pitch = 0; scaleMul = 1.0
@@ -100,6 +120,9 @@ struct FaceMeshOverlay: UIViewRepresentable {
     /// Defaults to `.symmetry` for any region not present.
     var regionDomain: [FacialRegion: FaceDomain] = [:]
     let controller: FaceMeshController
+    /// Frontal clinical photo for the photo-textured surface. Nil (or a capture
+    /// without projection data) falls back to the clay surface.
+    var photoJPEG: Data? = nil
     /// When `false`, no pan/pinch gesture recognisers are attached. Use for thumbnail
     /// previews embedded in scrollable layouts so the mesh doesn't intercept scrolling.
     var interactive: Bool = true
@@ -181,101 +204,31 @@ struct FaceMeshOverlay: UIViewRepresentable {
 
     private func rebuild(into view: ARView) {
         view.scene.anchors.removeAll()
-        guard let (entity, centroid) = buildMeshEntity() else { return }
+
+        let style = FaceMeshStyle(
+            surface: .automatic,
+            heatmap: HeatmapInput(regionSeverity: regionSeverity, regionDomain: regionDomain),
+            castsShadows: interactive,   // thumbnails skip the shadow map
+            generateCollision: false
+        )
+        // Timestamp is unique per capture — a stable texture-cache key without
+        // needing the owning case's identity threaded through every call site.
+        let cacheKey = "capture-\(face.timestamp.timeIntervalSinceReferenceDate)"
+        guard let result = FaceMeshBuilder.build(face: face, photoJPEG: photoJPEG,
+                                                 style: style, cacheKey: cacheKey) else { return }
 
         let anchor = AnchorEntity(world: [0, 0, -0.4])
-        anchor.addChild(entity)
+        anchor.addChild(result.entity)
         view.scene.addAnchor(anchor)
 
-        let light = DirectionalLight()
-        light.light.color = .white
-        light.light.intensity = 1500
-        light.orientation = simd_quatf(angle: -.pi / 6, axis: [1, 0, 0])
-        anchor.addChild(light)
+        FaceMeshLighting.apply(to: view, anchor: anchor, castsShadows: style.castsShadows)
 
         if !constructions.isEmpty {
             MetricConstructionRenderer.render(
-                constructions, on: entity, centroid: centroid
+                constructions, on: result.entity, centroid: result.centroid
             )
         }
 
-        controller.attach(entity)
-    }
-
-    /// Build a `ModelEntity` whose vertices are pre-centered on the face centroid,
-    /// so rotation and scale pivot around the centroid. Returns the entity AND the
-    /// centroid that was used so overlay renderers can align in the same frame.
-    private func buildMeshEntity() -> (ModelEntity, SIMD3<Float>)? {
-        let raw = face.vertices
-        guard !raw.isEmpty, !face.triangleIndices.isEmpty else { return nil }
-
-        let centroid = raw.reduce(SIMD3<Float>(repeating: 0), +) / Float(raw.count)
-        let centered = raw.map { $0 - centroid }
-
-        var d = MeshDescriptor(name: "face")
-        d.positions = MeshBuffers.Positions(centered)
-        d.primitives = .triangles(face.triangleIndices.map { UInt32($0) })
-        d.materials = .allFaces(0)
-
-        // intentionally silent: visual-only fallback — a failed mesh build just shows
-        // an empty viewport; indices were validated at decode time in CapturedFace.
-        guard let resource = try? MeshResource.generate(from: [d]) else { return nil }
-
-        let colors = vertexColors(vertexCount: centered.count)
-        var material = PhysicallyBasedMaterial()
-        material.baseColor = .init(tint: dominantTint(colors: colors))
-        material.roughness = 0.7
-        material.metallic = 0.0
-
-        let entity = ModelEntity(mesh: resource, materials: [material])
-        return (entity, centroid)
-    }
-
-    private func vertexColors(vertexCount: Int) -> [SIMD4<Float>] {
-        // Skin neutral baseline matches Theme.canvas-on-mesh — slightly warm grey.
-        let neutral = SIMD4<Float>(0.78, 0.78, 0.80, 1)
-        var colors = Array(repeating: neutral, count: vertexCount)
-        for (region, severity) in regionSeverity {
-            guard let indices = FaceLandmarkIndices.regionVertices[region] else { continue }
-            let domain = regionDomain[region] ?? .symmetry
-            let c = domain.meshTint(severity)
-            for i in indices where i >= 0 && i < vertexCount { colors[i] = c }
-        }
-        return colors
-    }
-
-    private func dominantTint(colors: [SIMD4<Float>]) -> UIColor {
-        let avg = colors.reduce(SIMD4<Float>(repeating: 0), +) / Float(max(colors.count, 1))
-        return UIColor(red: CGFloat(avg.x), green: CGFloat(avg.y), blue: CGFloat(avg.z), alpha: 1)
-    }
-}
-
-// MARK: - Domain-aware mesh tints
-
-private extension FaceDomain {
-    /// SIMD4 RGBA tint for the mesh, blending the domain hue with a skin-neutral
-    /// baseline by severity. `.normal` returns the neutral.
-    func meshTint(_ severity: MetricResult.Severity) -> SIMD4<Float> {
-        let neutral = SIMD4<Float>(0.78, 0.78, 0.80, 1)
-        let target  = self.hueRGB
-        let mix: Float
-        switch severity {
-        case .normal:      mix = 0.0
-        case .mild:        mix = 0.35
-        case .moderate:    mix = 0.70
-        case .significant: mix = 1.0
-        }
-        return neutral * (1 - mix) + target * mix
-    }
-
-    /// SIMD4 representation of the domain hue used for mesh shading.
-    var hueRGB: SIMD4<Float> {
-        switch self {
-        case .skinQuality: return SIMD4(0.478, 0.502, 0.580, 1) // #7A8094 slate
-        case .facialShape: return SIMD4(0.651, 0.706, 0.867, 1) // #A6B4DD periwinkle
-        case .proportions: return SIMD4(0.604, 0.698, 0.839, 1) // #9AB2D6 soft blue
-        case .symmetry:    return SIMD4(0.914, 0.710, 0.878, 1) // #E9B5E0 magenta-pink
-        case .expression:  return SIMD4(0.788, 0.733, 0.933, 1) // #C9BBEE lavender
-        }
+        controller.attach(result)
     }
 }

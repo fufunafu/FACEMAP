@@ -29,3 +29,19 @@ Device: iPhone with TrueDepth (X or newer), app freshly installed.
 
 ## 6. Copy check
 16. More tab footer should read v0.2.0 (stale); About screen says "FOUR-DOMAIN" above five listed domains; Settings sync says "Phase 2".
+## 7. Capture quality & gating (v0.8 pipeline upgrade)
+17. Frontal pose while smiling / jaw open / head rolled: auto-capture must NOT fire; the status banner shows the matching coaching line ("Relax the face — neutral expression", "Close the mouth gently", "Straighten the head — ears level"). Relax → captures within ~0.6 s.
+18. Manual capture (tap the button) while smiling: capture succeeds; Analysis shows a Fair/Poor quality badge and, if Poor, the low-quality warning row. Save is NOT blocked.
+19. Capture normally (level head, neutral face): Analysis shows "Capture quality: Good".
+20. Open a visit saved with a previous build: loads fine, NO quality badge, no warning (legacy compat).
+
+## 8. Photo-textured 3D model
+21. New capture → Analysis → tap the mesh thumbnail: the full-screen model shows the patient's actual skin projected onto the mesh (not the grey clay). Nose tip, eye corners, and lip line must land on the right geometry — this validates the projection formula end-to-end.
+22. CHIRALITY: put a small sticker dot on the patient's LEFT cheek before capture. In the viewer's Front preset, the dot must appear on the mesh's left cheek (viewer's right), matching the unmirrored clinical photo.
+23. Full-screen viewer: "Clay" toggle switches to the neutral surface and back; the heatmap toggle hides/shows region tinting. Orbit to the profile presets: the sides of the face fade smoothly to clay instead of smearing stretched photo pixels.
+24. Old (pre-upgrade) record: renders as smooth-shaded clay with the heatmap overlay, no crash, no blank viewport; no photo toggle appears.
+25. Shading: the mesh must look smooth (no visible hard triangle facets) in every view preset, on both old and new records.
+26. Heatmap: flagged regions show their domain hue ON the mesh surface, tracking rotation; metric constructions and billboard labels stay aligned in all presets.
+27. Calibration screens: tap-picking still selects the intended vertex (collision + original topology unchanged).
+28. Export the treatment-plan PDF and a comparison PDF: mesh images are PRESENT (no blank slots), textured, and sharp at print zoom. (The old ImageRenderer path produced blank mesh snapshots.)
+29. Same-day re-capture of an untreated face → Compare: surface-change table stays within the ±0.3 mm noise floor (median frame aggregation must not regress comparisons).

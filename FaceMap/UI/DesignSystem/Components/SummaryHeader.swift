@@ -13,6 +13,10 @@ struct SummaryHeader: View {
     let results: [MetricResult]
     let regionSeverity: [FacialRegion: MetricResult.Severity]
     let regionDomain: [FacialRegion: FaceDomain]
+    /// Frontal clinical photo — the thumbnail shows the photo-textured surface when
+    /// the capture carries projection data (bakes are cached, so the full-screen
+    /// viewer opens for free afterwards).
+    var photoJPEG: Data? = nil
     var onOpenFullscreen: () -> Void = {}
 
     /// The thumbnail is non-interactive so it doesn't intercept the parent ScrollView's gestures.
@@ -32,6 +36,7 @@ struct SummaryHeader: View {
                         regionSeverity: regionSeverity,
                         regionDomain: regionDomain,
                         controller: thumbnailController,
+                        photoJPEG: photoJPEG,
                         interactive: false,
                         backgroundColor: UIColor(Theme.surfaceRaised)
                     )

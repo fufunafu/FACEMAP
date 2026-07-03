@@ -2,16 +2,31 @@ import SwiftUI
 
 /// Full-bleed `FaceMeshOverlay` presented as a sheet. Used when the practitioner taps
 /// the mesh thumbnail in the analysis-screen header — the mesh fills the screen with
-/// the canonical viewer-controls strip (preset jumps + reset) and a close button.
+/// the canonical viewer-controls strip (preset jumps + reset), surface/heatmap
+/// toggles, and a close button.
 struct MeshFullScreen: View {
     @Environment(\.dismiss) private var dismiss
     let face: CapturedFace
     let regionSeverity: [FacialRegion: MetricResult.Severity]
     let regionDomain: [FacialRegion: FaceDomain]
+    /// Frontal clinical photo — enables the photo-textured surface when the capture
+    /// carries projection data.
+    var photoJPEG: Data? = nil
     /// Per-metric geometric overlays to render on the mesh. Empty = clean mesh.
     var constructions: [MetricConstruction] = []
 
     @StateObject private var controller = FaceMeshController()
+    @State private var surface: FaceMeshStyle.Surface = .automatic
+    @State private var heatmapVisible = true
+
+    /// The photo/clay toggle only appears when a photo texture is possible at all.
+    private var photoToggleAvailable: Bool {
+        photoJPEG != nil && face.hasPhotoProjectionData
+    }
+
+    private var heatmapToggleAvailable: Bool {
+        regionSeverity.values.contains { $0 != .normal }
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -20,11 +35,17 @@ struct MeshFullScreen: View {
                 regionSeverity: regionSeverity,
                 regionDomain: regionDomain,
                 controller: controller,
+                photoJPEG: photoJPEG,
                 constructions: constructions
             )
             .ignoresSafeArea()
 
             HStack {
+                if photoToggleAvailable || heatmapToggleAvailable {
+                    surfaceControls
+                        .padding(.top, 8)
+                        .padding(.leading, 16)
+                }
                 Spacer()
                 Button {
                     dismiss()
@@ -48,6 +69,40 @@ struct MeshFullScreen: View {
             }
         }
         .preferredColorScheme(.dark)
+    }
+
+    /// Photo ↔ clay surface toggle + heatmap visibility toggle.
+    private var surfaceControls: some View {
+        HStack(spacing: 6) {
+            if photoToggleAvailable {
+                Button {
+                    surface = (surface == .clay) ? .photo : .clay
+                    controller.setSurface(surface)
+                } label: {
+                    Label(surface == .clay ? "Photo" : "Clay",
+                          systemImage: surface == .clay ? "person.crop.square" : "cube")
+                        .font(Type.captionStrong)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                }
+                .background(.ultraThinMaterial, in: Capsule())
+                .foregroundStyle(.white)
+                .accessibilityLabel(surface == .clay ? "Show photo surface" : "Show clay surface")
+            }
+            if heatmapToggleAvailable {
+                Button {
+                    heatmapVisible.toggle()
+                    controller.setHeatmapVisible(heatmapVisible)
+                } label: {
+                    Image(systemName: heatmapVisible ? "circle.hexagongrid.fill" : "circle.hexagongrid")
+                        .font(Type.captionStrong)
+                        .padding(8)
+                }
+                .background(.ultraThinMaterial, in: Circle())
+                .foregroundStyle(.white)
+                .accessibilityLabel(heatmapVisible ? "Hide region heatmap" : "Show region heatmap")
+            }
+        }
     }
 }
 
