@@ -10,16 +10,15 @@ enum PDFTheme {
     static let pageHairline   = Color(white: 0.85)
     static let pageSurface    = Color(white: 0.97)
 
-    /// Calibration-warning amber, matching the in-app banner treatment.
-    /// TODO: Theme.warning token — promote to the app-wide Theme when one lands.
-    static let warningInk        = Color(hex: 0xB45309)
-    static let warningBackground = Color(hex: 0xFEF3C7)
+    /// Calibration-warning amber — the app-wide warning tokens (PDF pages are
+    /// always light, and the values are shared with the in-app banners).
+    static let warningInk        = Theme.warning
+    static let warningBackground = Theme.warningBg
 
     /// Status colours for visit-over-visit change. Desaturated so they read as
     /// annotations, not alarms. Never use facet/domain hues for status meaning.
-    /// TODO: Theme.statusWorsened / Theme.statusImproved tokens.
-    static let statusWorsened = Color(hex: 0x9B3B2E)   // desaturated brick
-    static let statusImproved = Color(hex: 0x3E7C4F)   // desaturated green
+    static let statusWorsened = Theme.statusWorsened
+    static let statusImproved = Theme.statusImproved
 
     static let pageWidth:  CGFloat = 595   // A4 portrait, 72dpi
     static let pageHeight: CGFloat = 842

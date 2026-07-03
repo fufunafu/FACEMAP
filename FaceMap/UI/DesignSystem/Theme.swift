@@ -47,6 +47,11 @@ enum Theme {
     static let positive   = Color(hex: 0x3E7C4F)   // confirmation ("picked", saved)
     static let negative   = Color(hex: 0x9B3B2E)   // destructive / failure
 
+    /// Visit-over-visit change status. Desaturated so they read as annotations,
+    /// not alarms; worsened must read heavier than improved.
+    static let statusWorsened = negative
+    static let statusImproved = positive
+
     // MARK: Geometry
 
     static let radiusCard:   CGFloat = 16

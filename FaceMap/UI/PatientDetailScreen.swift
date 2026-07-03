@@ -23,8 +23,6 @@ struct PatientDetailScreen: View {
     @State private var caseToDelete: PatientCase?
     @State private var showingDeleteVisitConfirm = false
 
-    // TODO: migrate to Theme.warning token
-    private let warningAmber = Color(hex: 0xC77D0A)
 
     private var sortedCases: [PatientCase] { patient.sortedCases }
 
@@ -431,7 +429,7 @@ struct PatientDetailScreen: View {
                     if draftCodeInUse {
                         Text("This code is already in use")
                             .font(Type.caption)
-                            .foregroundStyle(warningAmber)
+                            .foregroundStyle(Theme.warning)
                     }
                 } footer: {
                     Text("Pseudonymous code only. No PII.")

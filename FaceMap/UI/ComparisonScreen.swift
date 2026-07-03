@@ -20,11 +20,6 @@ struct ComparisonScreen: View {
     @State private var exportErrorMessage: String?
     @State private var showingExportError = false
 
-    // Inline status colours for visit-over-visit change. Worsened must read heavier
-    // than improved; facet/domain hues must never carry status meaning.
-    // TODO: Theme.statusWorsened / Theme.statusImproved tokens.
-    private static let worsenedInk = Color(hex: 0x9B3B2E)   // desaturated brick
-    private static let improvedInk = Color(hex: 0x3E7C4F)   // desaturated green
 
     private var resultsA: [MetricResult] { visitA.metricResults }
     private var resultsB: [MetricResult] { visitB.metricResults }
@@ -110,20 +105,18 @@ struct ComparisonScreen: View {
     // MARK: - Calibration banner
 
     /// Region tracking depends on calibrated landmark indices; warn when incomplete.
-    /// TODO: Theme.warning token — amber mirrors the PDF calibration strip
-    /// (0xB45309 ink on 0xFEF3C7).
     private var calibrationBanner: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 13))
-                .foregroundStyle(Color(hex: 0xB45309))
+                .foregroundStyle(Theme.warning)
             Text("Landmark calibration incomplete — region tracking uses default vertex indices. Calibrate landmarks from a saved case for reliable comparisons.")
                 .font(Type.caption)
-                .foregroundStyle(Color(hex: 0xB45309))
+                .foregroundStyle(Theme.warning)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(12)
-        .background(Color(hex: 0xFEF3C7))
+        .background(Theme.warningBg)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusCard, style: .continuous))
     }
 
@@ -323,7 +316,7 @@ struct ComparisonScreen: View {
                     }
                 }
             }
-            Text("Mean regional Z-projection change. Changes within ±0.3 mm are at the capture noise floor and should not be over-read.")
+            Text("Mean regional Z-projection change. Changes within \(deltas.first?.noiseFloorLabel ?? "±0.3 mm") are at the capture noise floor and should not be over-read.")
                 .font(Type.caption)
                 .foregroundStyle(Theme.inkMuted)
         }
@@ -341,7 +334,7 @@ struct ComparisonScreen: View {
 
     private func regionDeltaInk(_ d: RegionProjectionDelta) -> Color {
         if d.isWithinNoiseFloor { return Theme.inkMuted }
-        return d.deltaMeters < 0 ? Self.worsenedInk : Self.improvedInk
+        return d.deltaMeters < 0 ? Theme.statusWorsened : Theme.statusImproved
     }
 
     private func regionDeltaWeight(_ d: RegionProjectionDelta) -> Font.Weight {
@@ -402,8 +395,8 @@ struct ComparisonScreen: View {
         let arrow: String
         let statusInk: Color
         switch (improved, worsened) {
-        case (true, _):  arrow = "arrow.down.right"; statusInk = Self.improvedInk
-        case (_, true):  arrow = "arrow.up.right";   statusInk = Self.worsenedInk
+        case (true, _):  arrow = "arrow.down.right"; statusInk = Theme.statusImproved
+        case (_, true):  arrow = "arrow.up.right";   statusInk = Theme.statusWorsened
         default:         arrow = "arrow.right";      statusInk = Theme.inkMuted
         }
 

@@ -256,6 +256,12 @@ struct AnalysisScreen: View {
                let skin = await SkinQualityAnalyzer.evaluate(photoJPEG: jpeg) {
                 r.append(skin)
             }
+            // Fold capture quality into per-metric confidence: a shaky or off-pose
+            // capture makes every measurement on it less trustworthy. Legacy
+            // captures (no quality record) keep the metrics' intrinsic confidence.
+            if let composite = snapshot.quality?.composite {
+                r = r.map { $0.scalingConfidence(by: Double(composite)) }
+            }
             results = r
             isEvaluating = false
             isCalibrated = LandmarkCalibrationStore.shared.isFullyCalibrated
@@ -264,24 +270,19 @@ struct AnalysisScreen: View {
 
     // MARK: - Capture quality (badge + low-quality warning; never blocks save)
 
-    // TODO: migrate to Theme.warning token
-    private let qualityWarningAmber = Color(hex: 0xC77D0A)
-
     private func qualityColor(_ band: CaptureQuality.Band) -> Color {
         switch band {
         case .good: return Theme.ink
         case .fair: return Theme.inkDim
-        case .poor: return qualityWarningAmber
+        case .poor: return Theme.warning
         }
     }
 
     /// Quality badge for the active pose. Low quality warns but never blocks save —
     /// the practitioner decides whether a capture is usable.
     ///
-    /// Future hooks (deliberately out of v1):
-    /// - multiply `MetricResult.confidence` by `quality.composite`
-    /// - derive `SurfaceChangeAnalyzer`'s noise floor from the two visits' jitter
-    ///   (`max(0.3 mm, k * meanJitterMM)`) instead of the fixed 0.3 mm.
+    /// The composite also feeds `MetricResult.confidence` (scaled in `reevaluate`)
+    /// and the per-comparison noise floor (`SurfaceChangeAnalyzer.noiseFloor(from:to:)`).
     @ViewBuilder
     private func captureQualityRow(_ quality: CaptureQuality) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -304,7 +305,7 @@ struct AnalysisScreen: View {
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(quality.band == .poor ? qualityWarningAmber.opacity(0.5) : Theme.hairline,
+                .stroke(quality.band == .poor ? Theme.warning.opacity(0.5) : Theme.hairline,
                         lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
@@ -663,7 +664,7 @@ struct AnalysisScreen: View {
                         if newPatientCodeInUse {
                             Text("This code is already in use")
                                 .font(Type.caption)
-                                .foregroundStyle(warningAmber)
+                                .foregroundStyle(Theme.warning)
                         }
                         Button("Choose an existing patient instead") {
                             saveNewPatientMode = false
@@ -712,8 +713,6 @@ struct AnalysisScreen: View {
         }
     }
 
-    // TODO: migrate to Theme.warning token
-    private let warningAmber = Color(hex: 0xC77D0A)
 
     /// The patient currently selected in the save sheet (nil = Unassigned).
     private var selectedSavePatient: Patient? {
@@ -939,8 +938,6 @@ struct PatientPickerSheet: View {
     @State private var creatingNew = false
     @State private var newCode = ""
 
-    // TODO: migrate to Theme.warning token
-    private let warningAmber = Color(hex: 0xC77D0A)
 
     private var trimmedNewCode: String {
         newCode.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -985,7 +982,7 @@ struct PatientPickerSheet: View {
                         if newCodeInUse {
                             Text("This code is already in use")
                                 .font(Type.caption)
-                                .foregroundStyle(warningAmber)
+                                .foregroundStyle(Theme.warning)
                         }
                         Button("Create and move") {
                             guard !trimmedNewCode.isEmpty, !newCodeInUse else { return }

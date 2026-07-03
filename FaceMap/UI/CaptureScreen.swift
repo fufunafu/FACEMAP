@@ -57,8 +57,6 @@ struct CaptureScreen: View {
         }
     }
 
-    // TODO: migrate to Theme.warning token
-    private let warningAmber = Color(hex: 0xC77D0A)
 
     // Calibration gate: clinical capture is blocked until every landmark is
     // calibrated (the shipped indices are placeholders — see FaceLandmarkIndices).
@@ -322,7 +320,7 @@ struct CaptureScreen: View {
     private var badgeColor: Color {
         switch trackingState {
         case .unsupported, .permissionDenied, .sessionFailed, .interrupted:
-            return warningAmber
+            return Theme.warning
         case .noFace:   return Theme.inkDim
         case .tracking: return isPoseInWindow ? Theme.ink : Theme.inkDim
         }
@@ -386,7 +384,7 @@ struct CaptureScreen: View {
         VStack(spacing: 10) {
             Image(systemName: sessionIssueIcon)
                 .font(.system(size: 28))
-                .foregroundStyle(warningAmber)
+                .foregroundStyle(Theme.warning)
             Text(sessionIssueHeadline)
                 .font(Type.body.weight(.medium))
                 .foregroundStyle(Theme.ink)

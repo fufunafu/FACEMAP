@@ -22,8 +22,6 @@ struct PatientListScreen: View {
     @State private var patientToDelete: Patient?
     @State private var showingDeleteConfirm = false
 
-    // TODO: migrate to Theme.warning token
-    private let warningAmber = Color(hex: 0xC77D0A)
 
     var body: some View {
         ZStack {
@@ -276,7 +274,7 @@ struct PatientListScreen: View {
                         if newCodeInUse {
                             Text("This code is already in use")
                                 .font(Type.caption)
-                                .foregroundStyle(warningAmber)
+                                .foregroundStyle(Theme.warning)
                         }
                     } footer: {
                         Text("Use a pseudonym such as \"P-014\". No identifying information.")

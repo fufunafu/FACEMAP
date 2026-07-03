@@ -205,3 +205,100 @@ final class HeadPoseDecompositionTests: XCTestCase {
         XCTAssertFalse(CapturePose.obliqueR.contains(yawDegrees: pose.yawDegrees))
     }
 }
+
+// MARK: - Dynamic (jitter-derived) noise floor
+
+extension SurfaceChangeAnalyzerTests {
+    private func face(_ vertices: [SIMD3<Float>], meanJitterMM: Float) -> CapturedFace {
+        CapturedFace(
+            vertices: vertices,
+            triangleIndices: [],
+            transform: matrix_identity_float4x4,
+            blendShapes: [:],
+            timestamp: Date(),
+            quality: CaptureQuality.compute(framesAveraged: 10,
+                                            meanJitterMM: meanJitterMM,
+                                            maxJitterMM: meanJitterMM,
+                                            yawErrorDegrees: 0, pitchDegrees: 0,
+                                            rollDegrees: 0, expressionMax: 0,
+                                            gateViolations: [])
+        )
+    }
+
+    func test_noiseFloor_legacyCaptures_useBaseline() {
+        let v = (0..<500).map { _ in SIMD3<Float>(0, 0, 0) }
+        let legacy = CapturedFace(vertices: v, triangleIndices: [],
+                                  transform: matrix_identity_float4x4,
+                                  blendShapes: [:], timestamp: Date())
+        XCTAssertEqual(SurfaceChangeAnalyzer.noiseFloor(from: legacy, to: legacy), 0.0003)
+    }
+
+    func test_noiseFloor_lowJitter_staysAtBaseline() {
+        let v = (0..<500).map { _ in SIMD3<Float>(0, 0, 0) }
+        // 0.05 mm jitter each → 2·√(0.05²+0.05²) ≈ 0.14 mm < 0.3 mm baseline.
+        let a = face(v, meanJitterMM: 0.05)
+        XCTAssertEqual(SurfaceChangeAnalyzer.noiseFloor(from: a, to: a), 0.0003)
+    }
+
+    func test_noiseFloor_highJitter_raisesFloor_quadrature() {
+        let v = (0..<500).map { _ in SIMD3<Float>(0, 0, 0) }
+        // 0.3 and 0.4 mm → 2·√(0.09+0.16) = 2·0.5 = 1.0 mm.
+        let floor = SurfaceChangeAnalyzer.noiseFloor(from: face(v, meanJitterMM: 0.3),
+                                                     to: face(v, meanJitterMM: 0.4))
+        XCTAssertEqual(floor, 0.001, accuracy: 1e-7)
+    }
+
+    func test_regionChanges_stampDynamicFloor_andJudgeAgainstIt() {
+        var after = baseVertices()
+        // +0.5 mm on every midfaceL vertex: above the 0.3 mm baseline, below a raised 1.0 mm floor.
+        let midfaceL = FaceLandmarkIndices.regionVertices[.midfaceL] ?? []
+        for i in midfaceL { after[i].z += 0.0005 }
+
+        let noisy = SurfaceChangeAnalyzer.regionChanges(
+            from: face(baseVertices(), meanJitterMM: 0.3),
+            to: face(after, meanJitterMM: 0.4)
+        )
+        let noisyMidface = noisy.first { $0.region == .midfaceL }!
+        XCTAssertEqual(noisyMidface.noiseFloorMeters, 0.001, accuracy: 1e-7)
+        XCTAssertFalse(noisyMidface.exceedsNoiseFloor,
+                       "0.5 mm must not exceed a jitter-raised 1.0 mm floor")
+
+        let clean = SurfaceChangeAnalyzer.regionChanges(
+            from: face(baseVertices(), meanJitterMM: 0.02),
+            to: face(after, meanJitterMM: 0.02)
+        )
+        let cleanMidface = clean.first { $0.region == .midfaceL }!
+        XCTAssertEqual(cleanMidface.noiseFloorMeters, 0.0003, accuracy: 1e-9)
+        XCTAssertTrue(cleanMidface.exceedsNoiseFloor,
+                      "0.5 mm exceeds the baseline floor on clean captures")
+    }
+}
+
+// MARK: - Capture-quality → metric confidence
+
+final class MetricConfidenceScalingTests: XCTestCase {
+    private func result(confidence: Double) -> MetricResult {
+        MetricResult(metricId: "test.metric", metricName: "Test", domain: .symmetry,
+                     value: 1, target: 0...2, deviation: 0,
+                     confidence: confidence, regions: [], notes: nil)
+    }
+
+    func test_scalingConfidence_multiplies() {
+        let scaled = result(confidence: 1.0).scalingConfidence(by: 0.75)
+        XCTAssertEqual(scaled.confidence, 0.75, accuracy: 1e-9)
+        // Everything else unchanged.
+        XCTAssertEqual(scaled.metricId, "test.metric")
+        XCTAssertEqual(scaled.value, 1)
+    }
+
+    func test_scalingConfidence_composesWithIntrinsic() {
+        // Skin-quality style intrinsic 0.5 on a 0.8-composite capture → 0.4.
+        let scaled = result(confidence: 0.5).scalingConfidence(by: 0.8)
+        XCTAssertEqual(scaled.confidence, 0.4, accuracy: 1e-9)
+    }
+
+    func test_scalingConfidence_clampsFactor() {
+        XCTAssertEqual(result(confidence: 1.0).scalingConfidence(by: 1.5).confidence, 1.0)
+        XCTAssertEqual(result(confidence: 1.0).scalingConfidence(by: -0.5).confidence, 0.0)
+    }
+}

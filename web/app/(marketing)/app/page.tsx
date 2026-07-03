@@ -21,14 +21,19 @@ const SCREENSHOTS = [
 export const metadata: Metadata = {
   title: "The app",
   description:
-    "What FaceMap does on iPhone — capture a 3D TrueDepth mesh and clinical photos, quantify all five FAS facets with eight metrics, and measure objective volume change visit-over-visit. On-device, for licensed practitioners.",
+    "What FaceMap does on iPhone — quality-gated TrueDepth capture, a photo-textured 3D model, all five FAS facets quantified with eight metrics, and objective volume change visit-over-visit. On-device, for licensed practitioners.",
 };
 
 const FEATURES = [
   {
-    title: "TrueDepth 3D capture",
+    title: "Quality-gated 3D capture",
     body:
-      "A coached three-pose capture (frontal + both obliques) builds a high-fidelity 3D mesh from the iPhone's TrueDepth camera — and saves a standardised clinical photo with each pose. All on-device, no cloud upload.",
+      "A coached three-pose capture (frontal + both obliques) builds a 3D mesh from the iPhone's TrueDepth camera — and only auto-fires when the head is level and the expression neutral, coaching the patient line by line. Every capture carries a quality score, so a shaky record is flagged before it misleads.",
+  },
+  {
+    title: "Photo-textured 3D model",
+    body:
+      "The clinical photo captured with each pose is projected onto the mesh, so you review real skin on real geometry — not a grey shell. Toggle between photo and clay surfaces, with flagged regions overlaid in place.",
   },
   {
     title: "All five FAS facets, quantified",
@@ -191,7 +196,7 @@ export default function AppPage() {
                 Spin a captured face.
               </h2>
               <p className="mt-4 text-[var(--color-ink-dim)]">
-                The iOS app builds a high-fidelity 3D mesh from the iPhone&apos;s TrueDepth camera. The same mesh format renders inline here — drag to rotate, scroll to zoom.
+                The iOS app builds a smooth-shaded 3D mesh from the iPhone&apos;s TrueDepth camera and textures it with the patient&apos;s own clinical photo. The same mesh format renders inline here — drag to rotate, scroll to zoom.
               </p>
               <p className="mt-3 text-sm text-[var(--color-ink-muted)]">
                 {HAS_SAMPLE_MESH

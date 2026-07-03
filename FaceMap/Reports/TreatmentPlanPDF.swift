@@ -32,10 +32,17 @@ struct RegionProjectionDelta: Identifiable {
     let deltaMeters: Double
     var id: String { region.rawValue }
 
-    /// Below this magnitude the change is within ARKit capture noise.
+    /// Baseline noise floor. Instances carry the comparison-specific floor, which
+    /// `SurfaceChangeAnalyzer.noiseFloor(from:to:)` raises for jittery captures.
     static let noiseFloorMeters = SurfaceChangeAnalyzer.noiseFloorMeters
 
-    var isWithinNoiseFloor: Bool { abs(deltaMeters) <= Self.noiseFloorMeters }
+    /// The floor this comparison was judged against.
+    var noiseFloorMeters: Double = RegionProjectionDelta.noiseFloorMeters
+
+    var isWithinNoiseFloor: Bool { abs(deltaMeters) <= noiseFloorMeters }
+
+    /// Footnote fragment, e.g. "±0.3 mm".
+    var noiseFloorLabel: String { String(format: "±%.1f mm", noiseFloorMeters * 1000) }
 }
 
 /// Thin adapter over `SurfaceChangeAnalyzer` (the canonical engine, which also
@@ -50,9 +57,12 @@ enum RegionProjectionChange {
         guard let a = older, let b = newer else { return nil }
         let changes = SurfaceChangeAnalyzer.regionChanges(from: a, to: b)
         guard !changes.isEmpty else { return nil }
+        let floor = changes[0].noiseFloorMeters
         let byRegion = Dictionary(uniqueKeysWithValues: changes.map { ($0.region, $0.deltaZMeters) })
         let out = FacialRegion.allCases.compactMap { region in
-            byRegion[region].map { RegionProjectionDelta(region: region, deltaMeters: $0) }
+            byRegion[region].map {
+                RegionProjectionDelta(region: region, deltaMeters: $0, noiseFloorMeters: floor)
+            }
         }
         return out.isEmpty ? nil : out
     }
@@ -238,7 +248,6 @@ struct PDFPageShell<Content: View>: View {
 
 /// Landmark-calibration status strip. Amber when calibration is incomplete because
 /// region tracking and landmark metrics then rely on default vertex indices.
-/// TODO: Theme.warning token — colors mirror the in-app banner (0xB45309 on 0xFEF3C7).
 struct PDFCalibrationStrip: View {
     private let calibrated = LandmarkCalibrationStore.shared.calibratedCount
     private let total = AnatomicalLandmark.allCases.count
@@ -639,7 +648,7 @@ struct PDFRegionChangeTable: View {
                     column(Array(deltas.prefix(midpoint)))
                     column(Array(deltas.dropFirst(midpoint)))
                 }
-                Text("Mean regional Z-projection change. Changes within ±0.3 mm are at the capture noise floor and should not be over-read.")
+                Text("Mean regional Z-projection change. Changes within \(deltas.first?.noiseFloorLabel ?? "±0.3 mm") are at the capture noise floor and should not be over-read.")
                     .font(PDFType.legal)
                     .foregroundStyle(PDFTheme.pageInkMuted)
             } else {

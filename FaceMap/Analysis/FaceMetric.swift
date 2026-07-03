@@ -92,6 +92,18 @@ struct MetricResult: Codable, Hashable {
         regions    = try c.decode([FacialRegion].self, forKey: .regions)
         notes      = try c.decodeIfPresent(String.self, forKey: .notes)
     }
+
+    /// Copy with the confidence attenuated by a 0–1 factor — used to fold the
+    /// capture-quality composite into per-metric confidence (a metric evaluated on
+    /// a shaky, off-pose capture is less trustworthy than the same metric on a
+    /// clean one). Metrics keep reporting their intrinsic confidence; the capture
+    /// factor is applied once, after evaluation.
+    func scalingConfidence(by factor: Double) -> MetricResult {
+        MetricResult(metricId: metricId, metricName: metricName, domain: domain,
+                     value: value, target: target, deviation: deviation,
+                     confidence: confidence * min(max(factor, 0), 1),
+                     regions: regions, notes: notes)
+    }
 }
 
 /// Coarse anatomical regions used for visualization and aggregation across metrics.

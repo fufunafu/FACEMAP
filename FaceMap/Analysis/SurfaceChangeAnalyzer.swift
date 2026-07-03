@@ -10,9 +10,13 @@ struct RegionChange: Identifiable, Hashable {
     /// later visit (volume gain), negative = volume loss.
     let deltaZMeters: Double
     let vertexCount: Int
+    /// The noise floor this change was judged against — the fixed 0.3 mm baseline,
+    /// raised when either capture recorded high temporal jitter (see
+    /// `SurfaceChangeAnalyzer.noiseFloor(from:to:)`).
+    var noiseFloorMeters: Double = SurfaceChangeAnalyzer.noiseFloorMeters
 
     var exceedsNoiseFloor: Bool {
-        abs(deltaZMeters) >= SurfaceChangeAnalyzer.noiseFloorMeters
+        abs(deltaZMeters) >= noiseFloorMeters
     }
 }
 
@@ -32,7 +36,19 @@ struct RegionChange: Identifiable, Hashable {
 enum SurfaceChangeAnalyzer {
     /// Regional means from two back-to-back captures of the same untreated face
     /// move by roughly this much — changes below it are capture noise, not tissue.
+    /// This is the FLOOR; `noiseFloor(from:to:)` raises it for jittery captures.
     static let noiseFloorMeters: Double = 0.0003   // 0.3 mm
+
+    /// Comparison-specific noise floor. When both captures carry a quality record,
+    /// their per-vertex temporal jitters (independent captures → variances add in
+    /// quadrature) set a conservative 2σ bound, never below the 0.3 mm baseline.
+    /// Legacy captures without jitter stats fall back to the baseline.
+    static func noiseFloor(from earlier: CapturedFace, to later: CapturedFace) -> Double {
+        guard let jitterA = earlier.quality?.meanJitterMM,
+              let jitterB = later.quality?.meanJitterMM else { return noiseFloorMeters }
+        let combinedMeters = 2 * sqrt(Double(jitterA * jitterA + jitterB * jitterB)) / 1000
+        return max(noiseFloorMeters, combinedMeters)
+    }
 
     /// Bony landmarks essentially unaffected by soft-tissue fillers, used to cancel
     /// systematic offset between the two captures. Trichion is excluded (hairline
@@ -51,6 +67,7 @@ enum SurfaceChangeAnalyzer {
         guard !a.isEmpty, a.count == b.count else { return [] }
 
         let offset = stableOffset(a: a, b: b)
+        let floor = noiseFloor(from: earlier, to: later)
 
         var out: [RegionChange] = []
         for (region, indices) in FaceLandmarkIndices.regionVertices {
@@ -64,7 +81,8 @@ enum SurfaceChangeAnalyzer {
             out.append(RegionChange(
                 region: region,
                 deltaZMeters: sum / Double(n),
-                vertexCount: n
+                vertexCount: n,
+                noiseFloorMeters: floor
             ))
         }
         return out.sorted { abs($0.deltaZMeters) > abs($1.deltaZMeters) }
